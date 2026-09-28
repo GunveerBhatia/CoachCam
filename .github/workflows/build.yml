@@ -1,0 +1,91 @@
+# Builds an UNSIGNED CoachCam.ipa on a macOS runner.
+# SideStore signs it on your iPhone with your free Apple ID.
+#
+# Outputs:
+#   1. An Actions artifact (download from the run page; it comes as a .zip).
+#   2. A rolling "latest" pre-release, so you can download CoachCam.ipa
+#      straight from Safari on your iPhone.
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+    # Only build when app code or build config changes (docs edits don't burn minutes).
+    paths:
+      - "CoachCam/**"
+      - "project.yml"
+      - ".github/workflows/build.yml"
+  workflow_dispatch: {}   # "Run workflow" button in the Actions tab.
+
+# If you push twice quickly, cancel the older build.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # Needed to update the "latest" release.
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Select newest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (no code signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CoachCam.xcodeproj \
+            -scheme CoachCam \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build
+
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/CoachCam.app Payload/
+          zip -qry CoachCam.ipa Payload
+          ls -lh CoachCam.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoachCam-build-${{ github.run_number }}
+          path: CoachCam.ipa
+          retention-days: 14
+          compression-level: 0   # .ipa is already zipped
+
+      - name: Update "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest CoachCam.ipa \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Latest build #${{ github.run_number }}" \
+            --notes "Built from ${{ github.sha }}. Download CoachCam.ipa and install it with SideStore."

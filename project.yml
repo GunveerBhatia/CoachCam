@@ -1,0 +1,44 @@
+# XcodeGen project definition — the ONLY source of truth for the Xcode project.
+# GitHub Actions runs `xcodegen generate` to turn this into CoachCam.xcodeproj.
+# Never hand-edit or commit the .xcodeproj (it's in .gitignore).
+name: CoachCam
+
+options:
+  bundleIdPrefix: com.gunveer
+  deploymentTarget:
+    iOS: "18.0"          # Lowest version with everything we need (Vision Swift API, Camera Control button API).
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"               # Swift 5 language mode: fewer strict-concurrency errors with AVFoundation.
+    MARKETING_VERSION: "0.1.0"         # Human version shown in the app.
+    CURRENT_PROJECT_VERSION: "1"       # Build number; CI overrides this with the GitHub run number.
+    TARGETED_DEVICE_FAMILY: "1"        # iPhone only.
+
+targets:
+  CoachCam:
+    type: application
+    platform: iOS
+    sources:
+      - path: CoachCam
+    scheme: {}                         # Generate a shared scheme so xcodebuild -scheme works in CI.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gunveer.coachcam
+        PRODUCT_NAME: CoachCam
+    info:
+      # XcodeGen writes this Info.plist at generate time (it's gitignored).
+      path: CoachCam/Info.plist
+      properties:
+        CFBundleDisplayName: Coach Cam
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIStatusBarHidden: true
+        # Permission prompts (added now so later milestones don't churn this file).
+        NSCameraUsageDescription: Coach Cam uses the camera to frame and coach your photos.
+        NSPhotoLibraryAddUsageDescription: Coach Cam saves your photos to your library.
+        NSPhotoLibraryUsageDescription: Coach Cam checks which photos you keep so it can learn your style.

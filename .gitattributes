@@ -1,0 +1,6 @@
+# Keep Unix line endings in the repo so the macOS build runner sees clean files.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mlpackage/** binary
+*.mlmodel binary
