@@ -1,13 +1,20 @@
 import SwiftUI
 
-/// Settings sheet (the gear button). M11 adds more; for now: guides, debug tools, about.
+/// Settings sheet (the gear button). M11 adds more.
 struct SettingsView: View {
     let camera: CameraService
+    @ObservedObject var corrections: PersonTypeCorrections
+    @ObservedObject var aiNames: AINameHistory
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
     @AppStorage(SettingsKey.showGrid) private var showGrid = true
     @AppStorage(SettingsKey.showLevel) private var showLevel = true
+    @AppStorage(SettingsKey.showPersonLabels) private var showPersonLabels = true
+
+    @State private var apiKeyInput = ""
+    @State private var maskedKey = KeychainStore.maskedKey
+    @State private var confirmResetCorrections = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +24,58 @@ struct SettingsView: View {
                     Toggle("Level line", isOn: $showLevel)
                 }
 
+                Section {
+                    Toggle("Show person labels", isOn: $showPersonLabels)
+                    LabeledContent("Your corrections", value: "\(corrections.entries.count)")
+                    Button("Reset person-type corrections", role: .destructive) { confirmResetCorrections = true }
+                        .disabled(corrections.entries.isEmpty)
+                } header: {
+                    Text("People")
+                } footer: {
+                    Text("Labels (kid, teen, man, woman, older man, older woman) are estimated on this phone and only used to pick poses and camera height. Tap a label to fix it. Corrections stay on this phone.")
+                }
+
+                Section {
+                    if let masked = maskedKey {
+                        LabeledContent("Saved key", value: masked)
+                        Button("Remove key", role: .destructive) {
+                            KeychainStore.deleteAPIKey()
+                            maskedKey = nil
+                            Log.info("Claude API key removed")
+                        }
+                    }
+                    SecureField(maskedKey == nil ? "Paste your API key (sk-ant-…)" : "Replace key", text: $apiKeyInput)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("Save key") {
+                        let key = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if KeychainStore.saveAPIKey(key) {
+                            maskedKey = KeychainStore.maskedKey
+                            apiKeyInput = ""
+                            Log.info("Claude API key saved to Keychain")
+                        }
+                    }
+                    .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).count < 20)
+                } header: {
+                    Text("Claude API (Identify with AI)")
+                } footer: {
+                    Text("Stored in the iPhone Keychain, never in the app's code. Claude is only contacted when you tap an AI button. Model: \(AppConfig.shared.ai.model).")
+                }
+
+                Section {
+                    if aiNames.names.isEmpty {
+                        Text("Nothing yet").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(aiNames.names.prefix(20), id: \.self) { Text($0) }
+                        ShareLink("Share list (to add to vocabulary.json)", item: aiNames.names.joined(separator: "\n"))
+                        Button("Clear list", role: .destructive) { aiNames.clear() }
+                    }
+                } header: {
+                    Text("Objects identified by AI")
+                } footer: {
+                    Text("Send this list to Claude Code to add the useful names to the on-device detector's word list.")
+                }
+
                 Section("Debug") {
                     Toggle("Debug overlay", isOn: $showDebugOverlay)
                     NavigationLink("Debug log") { LogView() }
@@ -24,10 +83,14 @@ struct SettingsView: View {
                     LabeledContent("Photos access", value: PhotoLibrary.name(of: PhotoLibrary.addStatus))
                 }
 
-                Section("About") {
+                Section {
                     LabeledContent("Coach Cam", value: AppVersion.full)
                     Text(ProvisioningInfo.summary)
                         .foregroundStyle(signatureColor)
+                } header: {
+                    Text("About")
+                } footer: {
+                    Text("Object detection: YOLOE by Ultralytics (AGPL-3.0). Person types: FairFace by Kärkkäinen & Joo (CC BY 4.0), race outputs removed.")
                 }
             }
             .navigationTitle("Settings")
@@ -36,6 +99,10 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .confirmationDialog("Delete all your person-type corrections?", isPresented: $confirmResetCorrections,
+                                titleVisibility: .visible) {
+                Button("Reset corrections", role: .destructive) { corrections.reset() }
             }
         }
     }
@@ -46,7 +113,6 @@ struct SettingsView: View {
         return date.timeIntervalSinceNow < 2 * 24 * 3600 ? .orange : .secondary
     }
 }
-
 /// Shows the log, newest at the bottom, with Share and Clear buttons.
 struct LogView: View {
     @ObservedObject private var store = LogStore.shared

@@ -1,5 +1,7 @@
 import AVFoundation
+import CoreImage
 import CoreML
+import ImageIO
 import Vision
 
 /// Looks at the live camera feed and works out what's in it.
@@ -28,7 +30,6 @@ final class SceneAnalyzer: ObservableObject {
 
     // Only touched on `queue`:
     private var tick = 0
-    private var yoloRequest: VNCoreMLRequest?
     private let bodyRequest = VNDetectHumanBodyPoseRequest()
     private let faceRequest: VNDetectFaceRectanglesRequest = {
         let r = VNDetectFaceRectanglesRequest()
@@ -45,39 +46,46 @@ final class SceneAnalyzer: ObservableObject {
     private var tickTimes: [CFTimeInterval] = []
 
     private var modelLoadAttempted = false
+    private let objectDetector = ObjectDetector()
+    private let personTypes = PersonTypeClassifier()
+    /// Last analyzed frame, upright, for "Identify with AI" crops. Guarded by `frameLock`.
+    private var lastFrame: CIImage?
+    private let frameLock = NSLock()
+    private let snapshotContext = CIContext(options: [.cacheIntermediates: false])
 
-    /// Loads the model the first time a frame arrives (on `queue`), not in init: SwiftUI may
-    /// create throwaway copies of this object, and each would otherwise load the model.
+    /// Loads the models the first time a frame arrives (on `queue`), not in init: SwiftUI may
+    /// create throwaway copies of this object, and each would otherwise load them.
     private func loadModelIfNeeded() {
         guard !modelLoadAttempted else { return }
         modelLoadAttempted = true
-        loadObjectModel()
+        objectDetector.load()
+        let status = objectDetector.status
+        DispatchQueue.main.async { self.modelStatus = status }
     }
 
-    // MARK: - Model
+    // MARK: - Snapshot for "Identify with AI"
 
-    /// Loads YOLO11n (compiled by Xcode from Resources/Models/yolo11n.mlpackage).
-    private func loadObjectModel() {
-        guard let url = Bundle.main.url(forResource: "yolo11n", withExtension: "mlmodelc") else {
-            Log.error("YOLO model not found in app bundle, object detection off")
-            DispatchQueue.main.async { self.modelStatus = "missing" }
-            return
-        }
-        do {
-            let configuration = MLModelConfiguration()
-            configuration.computeUnits = .all   // Neural Engine when possible.
-            let model = try MLModel(contentsOf: url, configuration: configuration)
-            let request = VNCoreMLRequest(model: try VNCoreMLModel(for: model))
-            request.imageCropAndScaleOption = .scaleFill
-            yoloRequest = request
-            Log.info("YOLO11n loaded")
-            DispatchQueue.main.async { self.modelStatus = "ok" }
-        } catch {
-            Log.error("YOLO model failed to load: \(error.localizedDescription)")
-            DispatchQueue.main.async { self.modelStatus = "error" }
-        }
+    /// A JPEG of part of the last analyzed frame. `crop` is in upright coordinates (0–1,
+    /// top-left origin). Safe to call from the main thread.
+    func snapshotJPEG(crop: CGRect, maxDimension: CGFloat) -> Data? {
+        frameLock.lock()
+        let frame = lastFrame
+        frameLock.unlock()
+        guard let frame else { return nil }
+        let extent = frame.extent
+        let region = crop.clampedToUnit
+        guard region.width > 0, region.height > 0 else { return nil }
+        // Upright top-left coordinates → Core Image (bottom-left origin, pixels).
+        let rect = CGRect(x: extent.minX + region.minX * extent.width,
+                          y: extent.minY + (1 - region.maxY) * extent.height,
+                          width: region.width * extent.width,
+                          height: region.height * extent.height)
+        var image = frame.cropped(to: rect)
+        let scale = min(1, maxDimension / max(rect.width, rect.height))
+        image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        return snapshotContext.jpegRepresentation(of: image, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                  options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.8])
     }
-
     // MARK: - Frame intake (called on the camera's video queue)
 
     /// Offers a camera frame. Returns immediately; most frames are skipped on purpose.
@@ -123,7 +131,7 @@ final class SceneAnalyzer: ObservableObject {
         let handler = VNImageRequestHandler(cvPixelBuffer: visionBuffer, orientation: geometry.visionOrientation,
                                             options: [:])
         var requests: [VNRequest] = [bodyRequest, faceRequest]
-        if let yolo = yoloRequest { requests.append(yolo) }
+        if let objectRequest = objectDetector.request { requests.append(objectRequest) }
 
         let classify = VNClassifyImageRequest()
         let horizon = VNDetectHorizonRequest()
@@ -165,22 +173,34 @@ final class SceneAnalyzer: ObservableObject {
             }
         }
 
-        // Objects (YOLO). "person" boxes also rescue people the pose detector missed.
+        // Objects (YOLOE word list). "person" boxes also rescue people the pose detector missed.
         var objects: [DetectedObject] = []
-        for observation in (yoloRequest?.results as? [VNRecognizedObjectObservation]) ?? [] {
-            guard let top = observation.labels.first, top.confidence >= config.analysis.objectConfidence else { continue }
-            let box = FrameGeometry.upright(fromVision: observation.boundingBox)
-            if top.identifier == "person" {
-                let known = people.contains { $0.box.iou(box) > 0.3 || box.fractionInside($0.box) > 0.7 }
+        for found in objectDetector.detections(minConfidence: config.analysis.objectConfidence) {
+            if found.label == "person" {
+                let known = people.contains { $0.box.iou(found.box) > 0.3 || found.box.fractionInside($0.box) > 0.7 }
                 if !known {
-                    people.append(PersonInfo(box: box, joints: [:], fullBodyVisible: false))
+                    people.append(PersonInfo(box: found.box, joints: [:], fullBodyVisible: false))
                 }
             } else {
-                objects.append(DetectedObject(label: top.identifier, confidence: top.confidence, box: box))
+                objects.append(DetectedObject(label: found.label, confidence: found.confidence, box: found.box))
+            }
+        }        people.sort { $0.box.area > $1.box.area }   // Biggest (usually closest) first.
+        objects.sort { $0.confidence > $1.confidence }
+
+        // Person types (slow ticks, up to 4 largest faces). The tracker smooths these over time.
+        if isSlowTick {
+            let faced = people.indices.filter { people[$0].faceBox != nil }.prefix(4)
+            let scores = personTypes.classify(faces: faced.map { people[$0].faceBox! }, handler: handler)
+            for (index, output) in zip(faced, scores) {
+                people[index].typeModelOutput = output
             }
         }
-        people.sort { $0.box.area > $1.box.area }   // Biggest (usually closest) first.
-        objects.sort { $0.confidence > $1.confidence }
+
+        // Keep this frame (upright) for "Identify with AI".
+        let uprightFrame = CIImage(cvPixelBuffer: visionBuffer).oriented(geometry.visionOrientation)
+        frameLock.lock()
+        lastFrame = uprightFrame
+        frameLock.unlock()
 
         // Slow results
         if isSlowTick {

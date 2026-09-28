@@ -33,6 +33,9 @@ struct PersonInfo: Identifiable {
     var fullBodyVisible: Bool
     /// Eye, nose, lip and face-outline points (refreshed about 3×/s).
     var faceLandmarks: [CGPoint] = []
+    /// Raw person-type model output for this face (11 numbers), on slow ticks only.
+    /// Turned into a smoothed, correctable label by PersonTypeTracker.
+    var typeModelOutput: [Double]?
     /// How much of the frame's area the person's box covers (0–1).
     var fillFraction: Double {
         Double(box.width * box.height)

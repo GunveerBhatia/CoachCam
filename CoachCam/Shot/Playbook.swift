@@ -211,9 +211,10 @@ struct Playbook: Decodable {
 final class RulePlanner: ObservableObject {
     @Published private(set) var current: Playbook.Result?
 
-    func update(category: SubjectCategory, photoType: PhotoType?, description d: SceneDescription) {
+    func update(category: SubjectCategory, photoType: PhotoType?, description d: SceneDescription,
+                personTypes: Set<String>) {
         let query = Playbook.Query(category: category, photoType: photoType, peopleCount: d.peopleCount,
-                                   isFrontCamera: d.isFrontCamera, props: Set(d.props), personTypes: [])
+                                   isFrontCamera: d.isFrontCamera, props: Set(d.props), personTypes: personTypes)
         let result = Playbook.shared.bestRule(for: query)
         if result?.rule.id != current?.rule.id || result?.why != current?.why {
             current = result

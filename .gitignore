@@ -14,3 +14,6 @@ Payload/
 Thumbs.db
 .vscode/
 .idea/
+
+# Built by the build workflow from vocabulary.json (cached)
+CoachCam/Resources/Models/yoloe.mlpackage/

@@ -6,7 +6,7 @@
     "fastHz": 12,
     "maxVisionDimension": 1280,
     "slowEveryNthTick": 4,
-    "objectConfidence": 0.35,
+    "objectConfidence": 0.3,
     "bodyJointConfidence": 0.3,
     "classificationMinConfidence": 0.1
   },
@@ -14,7 +14,7 @@
   "detection": {
     "_readme": "Detection only DESCRIBES the frame; it never picks the photo type. A new subject category must be proposed this many ticks in a row (12 ticks = 1 s) before it replaces the current one. categoryMinConfidence = minimum detector confidence for an object (food or other) to decide the category; scene labels use their own thresholds below.",
     "categoryStableTicks": 5,
-    "categoryMinConfidence": 0.5,
+    "categoryMinConfidence": 0.45,
 
     "_people": "A person counts as the subject if their box covers this much of the frame, or a face is found.",
     "peopleMinFill": 0.03,
@@ -30,7 +30,7 @@
 
     "foodMinLabelConfidence": 0.25,
     "foodMinObjectArea": 0.03,
-    "foodObjectLabels": ["pizza", "cake", "sandwich", "donut", "hot dog", "broccoli", "carrot", "banana", "apple", "orange", "bowl"],
+    "foodObjectLabels": ["pizza", "burger", "sandwich", "salad", "cake", "dessert", "donut", "ice cream", "sushi", "pasta", "fries", "bread", "fruit", "bowl of food", "plate of food", "drink", "cocktail"],
     "foodSceneLabels": ["food", "dessert", "meal", "dish", "baked_goods", "fruit", "vegetable", "drink", "beverage", "coffee", "cake", "pizza", "salad", "sandwich", "burger", "sushi", "breakfast"],
 
     "_building": "Sanity checks: a building needs the scene label AND distance (focus far, not macro, no big close object) AND strong vertical lines. Outdoor labels add confidence. lensPosition is 0 (closest focus) to 1 (farthest); calibrate buildingMinLensPosition from the debug overlay's 'Distance' row.",
@@ -58,6 +58,21 @@
     "harshClippedHighlights": 0.08,
     "backlitFaceRatio": 0.6,
     "sideLightDifference": 0.12
+  },
+
+  "people": {
+    "_readme": "Person types (kid, teen, man, woman, older man, older woman) from the on-device model. Below personTypeMinConfidence the label is just 'person'. Smoothing: how much each new reading counts (0-1). A face gone this long is forgotten (with its correction).",
+    "personTypeMinConfidence": 0.6,
+    "personTypeSmoothing": 0.35,
+    "personTypeReleaseSeconds": 2.0
+  },
+
+  "ai": {
+    "_readme": "'Identify with AI' (only when you tap it). Offered when a tapped object is below identifyBelowConfidence, or nothing was detected where you tapped. The image sent is a crop around the object, at most maxImageDimension pixels.",
+    "model": "claude-sonnet-5",
+    "identifyBelowConfidence": 0.5,
+    "maxImageDimension": 768,
+    "timeoutSeconds": 30
   },
 
   "subject": {

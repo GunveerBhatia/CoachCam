@@ -6,4 +6,5 @@ enum SettingsKey {
     static let showDebugOverlay = "showDebugOverlay"
     static let showGrid = "showGrid"
     static let showLevel = "showLevel"
+    static let showPersonLabels = "showPersonLabels"
 }

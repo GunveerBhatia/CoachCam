@@ -44,6 +44,19 @@ struct AppConfig: Decodable {
         var sideLightDifference: Double
     }
 
+    struct People: Decodable {
+        var personTypeMinConfidence: Double
+        var personTypeSmoothing: Double
+        var personTypeReleaseSeconds: Double
+    }
+
+    struct AI: Decodable {
+        var model: String
+        var identifyBelowConfidence: Float
+        var maxImageDimension: Double
+        var timeoutSeconds: Double
+    }
+
     struct Subject: Decodable {
         var minOverlapToFollow: Double
         var releaseAfterSeconds: Double
@@ -56,6 +69,8 @@ struct AppConfig: Decodable {
 
     var analysis: Analysis
     var detection: Detection
+    var people: People
+    var ai: AI
     var subject: Subject
     var light: Light
 

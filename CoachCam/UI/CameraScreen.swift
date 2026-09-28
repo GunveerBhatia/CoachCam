@@ -18,10 +18,13 @@ struct CameraScreen: View {
     @State private var motion = MotionService()
     @State private var analyzer = SceneAnalyzer()
     @State private var planner = RulePlanner()
+    @State private var personTypes = PersonTypeTracker()
+    @StateObject private var identify = IdentifyController()
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
     @AppStorage(SettingsKey.showGrid) private var showGrid = true
     @AppStorage(SettingsKey.showLevel) private var showLevel = true
+    @AppStorage(SettingsKey.showPersonLabels) private var showPersonLabels = true
 
     @State private var showSettings = false
     @State private var focusPoint: CGPoint?
@@ -47,7 +50,9 @@ struct CameraScreen: View {
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .sheet(isPresented: $showSettings) { SettingsView(camera: camera) }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(camera: camera, corrections: personTypes.corrections, aiNames: identify.history)
+        }
         // Volume buttons and the Camera Control button take a photo.
         .onCameraCaptureEvent { event in
             if event.phase == .ended { takePhoto() }
@@ -84,6 +89,7 @@ struct CameraScreen: View {
         let describer = self.describer
         let photoTypes = self.photoTypes
         let planner = self.planner
+        let personTypes = self.personTypes
         let motion = self.motion
         camera.frameHandler = { sampleBuffer, info in
             analyzer.submit(sampleBuffer, info: info)
@@ -91,9 +97,10 @@ struct CameraScreen: View {
         analyzer.onAnalysis = { analysis in
             let description = describer.ingest(analysis, cameraPitch: motion.cameraPitch,
                                                levelError: motion.levelError)
+            personTypes.update(with: analysis)
             let category = photoTypes.effectiveCategory(detected: description.category)
             planner.update(category: category, photoType: photoTypes.choice(for: category),
-                           description: description)
+                           description: description, personTypes: personTypes.currentTypes)
         }
     }
 
@@ -120,6 +127,7 @@ struct CameraScreen: View {
                 if showLevel { LevelOverlay(motion: motion) }
                 if showDebugOverlay { DetectionOverlay(analyzer: analyzer, camera: camera) }
                 SubjectBrackets(tracker: describer.subjects, camera: camera)
+                if showPersonLabels { PersonLabelsOverlay(tracker: personTypes, camera: camera) }
                 if let point = focusPoint {
                     FocusIndicator(point: point).id(point.x + point.y * 10_000)
                 }
@@ -136,6 +144,10 @@ struct CameraScreen: View {
                         Spacer()
                     }
                     .padding(6)
+                }
+                VStack {
+                    Spacer()
+                    IdentifyBar(controller: identify, analyzer: analyzer)
                 }
                 if photosBlocked {
                     VStack {
@@ -163,6 +175,7 @@ struct CameraScreen: View {
                 if let point = camera.uprightPoint(fromLayerPoint: location) {
                     let picked = describer.subjects.select(at: point, in: analyzer.latest)
                     Log.info("Tap → \(picked)")
+                    offerIdentify(at: point)
                 }
             }
             .gesture(pinchToZoom)
@@ -170,6 +183,27 @@ struct CameraScreen: View {
         }
         .aspectRatio(3.0 / 4.0, contentMode: .fit)   // Same shape as the photo: what you see is what you get.
         .clipped()
+    }
+
+    /// Offers "Identify with AI" when the tapped thing isn't confidently named on the phone:
+    /// a low-confidence object, or nothing detected at all (and not a person).
+    private func offerIdentify(at point: CGPoint) {
+        let latest = analyzer.latest
+        let tappedObject = latest.objects.filter { $0.box.contains(point) }.min { $0.box.area < $1.box.area }
+        let tappedPerson = latest.people.contains { $0.box.contains(point) }
+        if let object = tappedObject {
+            if object.confidence < AppConfig.shared.ai.identifyBelowConfidence {
+                identify.offer(region: object.box, localGuess: object.label)
+            } else {
+                identify.dismiss()
+            }
+        } else if !tappedPerson {
+            let side: CGFloat = 0.3
+            identify.offer(region: CGRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side)
+                .clampedToUnit, localGuess: nil)
+        } else {
+            identify.dismiss()
+        }
     }
 
     private var pinchToZoom: some Gesture {

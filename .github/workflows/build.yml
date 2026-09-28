@@ -14,6 +14,7 @@ on:
     paths:
       - "CoachCam/**"
       - "project.yml"
+      - "scripts/export_yoloe.py"
       - ".github/workflows/build.yml"
   workflow_dispatch: {}   # "Run workflow" button in the Actions tab.
 
@@ -40,6 +41,30 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
+
+      # The object detector is built from vocabulary.json. It's cached, so this only
+      # re-runs (~3–5 min) when the word list or the export script changes.
+      - name: Restore object detector from cache
+        id: yoloe-cache
+        uses: actions/cache@v4
+        with:
+          path: CoachCam/Resources/Models/yoloe.mlpackage
+          key: yoloe-${{ hashFiles('CoachCam/Resources/vocabulary.json', 'scripts/export_yoloe.py') }}
+
+      - name: Set up Python (only if the detector must be rebuilt)
+        if: steps.yoloe-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build object detector from vocabulary.json
+        if: steps.yoloe-cache.outputs.cache-hit != 'true'
+        run: |
+          # Pinned: newer torch/numpy break coremltools' PyTorch converter.
+          pip install "torch==2.5.1" "torchvision==0.20.1" "numpy==1.26.4" "coremltools==8.3.0"
+          pip install "ultralytics>=8.4,<8.5"
+          pip install "numpy==1.26.4"
+          python scripts/export_yoloe.py
 
       - name: Install XcodeGen
         run: brew install xcodegen
