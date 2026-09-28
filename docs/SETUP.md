@@ -5,16 +5,27 @@ How it works:
 ```
 Your PC (write code) ──git push──▶ GitHub (Mac builds CoachCam.ipa for free)
                                          │
-                       iPhone Safari downloads CoachCam.ipa
+                        your PC downloads CoachCam.ipa
                                          │
-                   SideStore signs it with your free Apple ID and installs it
+       iloader (on your PC, iPhone plugged in by USB) signs it with your
+       free Apple ID and installs it on the iPhone
 ```
 
-You do **Parts 1–3 once**. After that, updating is Part 4 and the weekly refresh is Part 5.
+You do **Parts 1–2 once**. After that: install or update = Part 3, weekly refresh = Part 4.
+
+> **Why iloader and not SideStore?** SideStore's sign-in currently fails with
+> **"ADI native error (-45061)"**, a known SideStore bug. Until that's fixed we install
+> **and** refresh with **iloader's Import IPA** from the PC. See Part 5 for switching back
+> later.
+
+> ⚠️ **Only download iloader from its real GitHub page:**
+> **<https://github.com/nab138/iloader/releases>**
+> There are fake "iloader" sites. Never download it from anywhere else, and never type your
+> Apple ID into a website.
 
 ---
 
-## Part 1 — Put the code on GitHub (one time)
+## Part 1 — Put the code on GitHub (one time) ✅ done
 
 ### 1a. Make the repo **public**
 GitHub's own Macs cost nothing on **public** repos. On a free account, a **private** repo gets
@@ -27,24 +38,17 @@ Making it public is safe: your Claude API key goes into the iPhone's Keychain in
 1. Go to <https://github.com/new> (sign up first if you don't have an account).
 2. **Repository name:** `CoachCam`
 3. Pick **Public**.
-4. **Leave all the boxes unchecked**: no README, no .gitignore, no license. We already have those files.
-5. Click **Create repository**. Leave the page open; you'll need its URL.
+4. **Leave all the boxes unchecked**: no README, no .gitignore, no license.
+5. Click **Create repository**.
 
 ### 1b. Push the code from your PC
-Open **PowerShell** (Start menu → type "PowerShell"). Run these commands one at a time, and
-replace `YOUR-GITHUB-USERNAME` with your GitHub username:
+In **PowerShell**, run these one at a time (replace `YOUR-GITHUB-USERNAME`):
 
 ```bash
 cd C:\Users\gunve\CoachCam
 ```
 ```bash
 git init -b main
-```
-```bash
-git config user.name "Your Name"
-```
-```bash
-git config user.email "gunveersbhatia@gmail.com"
 ```
 ```bash
 git add .
@@ -59,103 +63,85 @@ git remote add origin https://github.com/YOUR-GITHUB-USERNAME/CoachCam.git
 git push -u origin main
 ```
 
-The first time you push, a browser window opens asking you to sign in to GitHub. Click
-**Sign in with your browser**, then **Authorize**. Windows remembers this, so it only happens once.
+The first push opens a **Connect to GitHub** window. Click **Sign in with your browser**, then
+**Authorize**. Windows remembers this, so it only happens once.
 
 ### 1c. Watch the build
 1. On your repo page, click the **Actions** tab.
-2. You'll see a run called **Build IPA**. The yellow dot means it's running; it takes about 4–8 minutes.
-3. A **green check** means it worked. A **red X** means it failed: click it, click **build**,
-   copy the red error text, and paste it to Claude.
+2. The run called **Build IPA** takes about 4–8 minutes. A **green check** means it worked.
+3. A **red X** means it failed: click it → **build** → copy the red error text → send it to Claude.
 
 > To re-run a build without changing code: **Actions → Build IPA → Run workflow → Run workflow**.
 
 ---
 
-## Part 2 — Set up SideStore (one time, needs your PC and a USB cable)
+## Part 2 — Set up iloader (one time) ✅ done
 
-SideStore is an app store on your phone that signs apps with your free Apple ID.
-After this setup you won't need the PC for installing or refreshing.
-
-### 2a. On your iPhone
-1. Make sure your iPhone has a **passcode** set.
-2. From the App Store, install **LocalDevVPN**. SideStore uses it to talk to your phone from on the phone itself.
-3. Open LocalDevVPN, tap **Connect**, and allow the VPN when asked.
-
-### 2b. On your PC
+### 2a. On your PC
 1. Install **iTunes** from Apple: <https://www.apple.com/itunes/download/win64>.
-   SideStore recommends Apple's version. If it gives you trouble, use the **Apple Devices** app
-   from the Microsoft Store instead.
-2. Install **iloader**, SideStore's installer:
-   <https://github.com/nab138/iloader/releases/latest/download/iloader-windows-x64.msi>.
-   Run the `.msi` and click through.
+   If it gives you trouble, use the **Apple Devices** app from the Microsoft Store instead.
+2. Go to **<https://github.com/nab138/iloader/releases>**. Under the newest release, open
+   **Assets** (click **Show all assets** if the list is cut off) and download
+   **`iloader-windows-x64.msi`**. Run it and click through.
 3. Plug your iPhone into the PC with a USB cable. On the phone, tap **Trust** and enter your passcode.
-4. Open **iloader**.
-5. Sign in with your **Apple ID**. It's case-sensitive.
-   *Optional:* some people use a second, spare Apple ID for sideloading. Either works.
-6. Select your iPhone.
-7. Click **Install SideStore (Stable)** and wait for it to finish. iloader also creates the
-   "pairing file" SideStore needs.
+4. Open **iloader**, sign in with your **Apple ID** (case-sensitive), and select your iPhone.
 
-### 2c. Back on your iPhone
+### 2b. On your iPhone (after the first app is installed in Part 3)
 1. **Trust your Apple ID as a developer:** Settings → General → **VPN & Device Management** →
    tap your Apple ID under "Developer App" → **Trust** → **Allow & Restart**, then enter your passcode.
 2. **Turn on Developer Mode:** Settings → **Privacy & Security** → scroll to the bottom →
    **Developer Mode** → on. The phone restarts; after it does, tap **Turn On**.
-3. Open **LocalDevVPN** and tap **Connect**.
-4. Open **SideStore** and sign in with the **same Apple ID**.
-5. Go to **My Apps** and tap the **7 DAYS** button next to SideStore to refresh it once.
-   If it asks about certificates, tap **Yes** or **Refresh Now**.
 
-If something here doesn't match what you see, the official guide is <https://docs.sidestore.io>.
+You only do these once. They stay on across reinstalls.
 
 ---
 
-## Part 3 — Install Coach Cam
+## Part 3 — Install or update Coach Cam (iloader, PC + USB)
 
-### Option A: straight from your iPhone (easiest)
-1. In **Safari** on your iPhone, go to
-   `https://github.com/YOUR-GITHUB-USERNAME/CoachCam/releases/tag/latest`.
-2. Under **Assets**, tap **CoachCam.ipa** and then **Download**. It goes to Files → Downloads.
-3. Open **LocalDevVPN** and make sure it's connected.
-4. Open **SideStore** → **My Apps** → tap **+** at the top left → choose **CoachCam.ipa** from Downloads.
-5. Wait for it to install, then open **Coach Cam**. You should see **"Hello Coach Cam"** and
-   **Build N**, where N matches the "#N" on the release.
+1. On your PC, wait for the newest build in **Actions** to show a green check.
+2. Download the newest `.ipa`:
+   **<https://github.com/GunveerBhatia/CoachCam/releases/download/latest/CoachCam.ipa>**
+   (or open the repo → **Releases** → **Latest build #N** → **CoachCam.ipa**).
+3. Plug in your iPhone and unlock it.
+4. Open **iloader** → select your iPhone → **Import IPA** → choose the `CoachCam.ipa` you
+   just downloaded. Wait until it says it's done.
+5. Open **Coach Cam** on the phone and check that the **Build** number matches the "#N" on
+   the release. In M1 and later, the build number is in **Settings** (gear icon) → **About**.
 
-### Option B: from the Actions page (on your PC)
-1. Go to **Actions → the latest green run** and scroll to **Artifacts**.
-2. Download **CoachCam-build-N**. It's a `.zip`; right-click → **Extract All** to get `CoachCam.ipa`.
-3. Get the `.ipa` onto your iPhone (iCloud Drive, email it to yourself, etc.) and install it
-   with SideStore as in step 4 above.
+Installing over the old version **keeps your settings, log and data**.
 
----
-
-## Part 4 — Updating Coach Cam
-Every time new code is pushed, GitHub builds it and replaces the **latest** release. To update:
-
-1. Wait for the green check in **Actions**.
-2. Repeat **Part 3, Option A**. Installing over the old version keeps your settings and data.
-3. Open the app and check that the **Build** number went up.
+> Make sure you pick the **new** `.ipa`. If Windows saved it as `CoachCam (1).ipa`, delete the
+> old ones from Downloads so you don't import a stale build.
 
 ---
 
-## Part 5 — Refreshing every 7 days
-Free Apple ID signatures expire after **7 days**. When that happens the apps won't open,
-but your data is safe.
+## Part 4 — Refresh every 7 days
+Apps signed with a free Apple ID stop opening after **7 days**. Your data is safe; the app
+just won't launch until it's re-signed.
 
-**Manual (30 seconds):** open **LocalDevVPN** → **Connect**, then open **SideStore** →
-**My Apps** → **Refresh All**.
+**To refresh:** do **Part 3, steps 2–4** again. Re-importing the latest `.ipa` re-signs it
+for another 7 days. It takes about a minute and needs the PC and USB cable.
 
-**Automatic (recommended):**
-1. Open the **Shortcuts** app → **Automation** → **+** → **Time of Day**.
-2. Choose a daily time when your phone is usually on Wi-Fi, and select **Run Immediately**.
-3. Add the action **LocalDevVPN → Connect**, if it's offered, then **SideStore → Refresh All Apps**.
+Tips:
+- Coach Cam shows **"Signature expires in N days"** in **Settings → About** (from M1 on).
+- Set a weekly reminder on your phone, e.g. every Sunday: "Refresh Coach Cam (iloader)".
+- iloader has no automatic refresh yet. Its developer lists auto-refresh as a planned feature.
 
-⚠️ If **SideStore itself** expires (you went more than 7 days without refreshing), redo
-**Part 2b, steps 3–7** with your PC. It takes 2 minutes.
+**Free Apple ID limits:** at most **3 sideloaded apps** at a time, and **10 new app IDs per
+week**. Coach Cam uses only one app ID, and re-importing it doesn't use a new one. SideStore
+also counts toward the 3 while it's installed; you can delete it from the phone until its
+sign-in bug is fixed.
 
-**Free Apple ID limits:** at most **3 sideloaded apps** at a time (SideStore counts as one), and
-**10 new app IDs per week**. Coach Cam uses only one.
+---
+
+## Part 5 — Later: back to SideStore (optional)
+Once SideStore fixes the ADI (-45061) sign-in bug, SideStore can refresh apps on the phone
+with no PC:
+1. Install **LocalDevVPN** from the App Store and tap **Connect**.
+2. In iloader, click **Install SideStore (Stable)**.
+3. In SideStore, sign in, then **My Apps → +** → pick `CoachCam.ipa`; refresh with **Refresh All**.
+
+Official guide: <https://docs.sidestore.io>. Until then, stick with Parts 3–4.
 
 ---
 
@@ -163,7 +149,8 @@ but your data is safe.
 | Problem | Fix |
 |---|---|
 | Build has a red X | Open the failed run → **build** → copy the error → send it to Claude. |
-| "Untrusted Developer" | Part 2c, step 1. |
-| SideStore says it can't connect / pairing error | Connect LocalDevVPN. If it still fails, re-run iloader (Part 2b). |
-| App closes on launch | In the app's **Debug log** (added in M1) tap **Share**. Or: Settings → Privacy & Security → Analytics & Improvements → Analytics Data → look for `CoachCam-…` and share it. |
-| "Maximum number of apps" | Remove another sideloaded app in SideStore. |
+| "Untrusted Developer" | Part 2b, step 1. |
+| iloader doesn't see the iPhone | Unlock the phone, re-plug the cable, tap **Trust**. Reinstall iTunes or Apple Devices if it still fails. |
+| "Maximum number of apps" | Delete another sideloaded app (e.g. SideStore) from the phone. |
+| App closes on launch | Settings → Privacy & Security → Analytics & Improvements → Analytics Data → look for `CoachCam-…` and share it. |
+| Something wrong inside the app | Coach Cam **Settings → Debug log → Share** and send it to Claude. The log is also in the **Files** app → On My iPhone → Coach Cam. |

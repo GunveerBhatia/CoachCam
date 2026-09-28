@@ -38,6 +38,9 @@ targets:
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIStatusBarHidden: true
+        # Makes Documents (incl. coachcam-log.txt) visible in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         # Permission prompts (added now so later milestones don't churn this file).
         NSCameraUsageDescription: Coach Cam uses the camera to frame and coach your photos.
         NSPhotoLibraryAddUsageDescription: Coach Cam saves your photos to your library.
