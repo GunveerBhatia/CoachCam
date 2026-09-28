@@ -7,6 +7,7 @@ The words are baked in at export time, so the app can't change them on the phone
 edit vocabulary.json and push, and the build workflow re-runs this (cached otherwise).
 Runs on a GitHub macOS runner; Core ML conversion doesn't work on Windows.
 
+Model sizes: yoloe-26n (~8 MB, fastest), yoloe-26s (~21 MB, recommended), yoloe-26m (larger).
 License: YOLOE / Ultralytics are AGPL-3.0, fine for a personal, non-distributed app.
 """
 import json
