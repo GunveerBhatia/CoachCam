@@ -30,7 +30,7 @@
 
     "foodMinLabelConfidence": 0.25,
     "foodMinObjectArea": 0.03,
-    "foodObjectLabels": ["pizza", "burger", "sandwich", "salad", "cake", "dessert", "donut", "ice cream", "sushi", "pasta", "fries", "bread", "fruit", "bowl of food", "plate of food", "drink", "cocktail"],
+    "foodObjectLabels": ["pizza", "burger", "sandwich", "wrap", "burrito", "taco", "hot dog", "salad", "soup", "ramen", "noodles", "pasta", "spaghetti", "rice", "fried rice", "curry", "sushi", "dumpling", "steak", "chicken", "fish", "shrimp", "egg", "omelette", "pancakes", "waffle", "toast", "bagel", "croissant", "bread", "muffin", "cookie", "brownie", "cake", "cupcake", "pie", "donut", "ice cream", "dessert", "chocolate", "candy", "fries", "chips", "popcorn", "cheese", "fruit", "apple", "banana", "orange", "strawberry", "grapes", "watermelon", "avocado", "tomato", "vegetables", "broccoli", "carrot", "smoothie", "juice", "milkshake", "coffee", "latte", "tea", "boba tea", "cocktail", "beer", "wine", "drink", "bowl of food", "plate of food", "charcuterie board", "cereal", "yogurt"],
     "foodSceneLabels": ["food", "dessert", "meal", "dish", "baked_goods", "fruit", "vegetable", "drink", "beverage", "coffee", "cake", "pizza", "salad", "sandwich", "burger", "sushi", "breakfast"],
 
     "_building": "Sanity checks: a building needs the scene label AND distance (focus far, not macro, no big close object) AND strong vertical lines. Outdoor labels add confidence. lensPosition is 0 (closest focus) to 1 (farthest); calibrate buildingMinLensPosition from the debug overlay's 'Distance' row.",
