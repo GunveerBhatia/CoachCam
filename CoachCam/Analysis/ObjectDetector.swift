@@ -85,12 +85,13 @@ final class ObjectDetector {
             let rows = rowsFirst ? dimA : dimB
             logLayoutOnce("end-to-end \(reader.shape)")
             for i in 0..<rows {
-                func v(_ k: Int) -> Float { rowsFirst ? reader.value(0, i, k) : reader.value(0, k, i) }
-                let score = v(4)
+                func cell(_ k: Int) -> Float { rowsFirst ? reader.value(0, i, k) : reader.value(0, k, i) }
+                let score = cell(4)
                 guard score >= minConfidence else { continue }
-                let classIndex = Int(v(5).rounded())
-                let box = CGRect(x: CGFloat(v(0) / inputSize), y: CGFloat(v(1) / inputSize),
-                                 width: CGFloat((v(2) - v(0)) / inputSize), height: CGFloat((v(3) - v(1)) / inputSize))
+                let classIndex = Int(cell(5).rounded())
+                let box = CGRect(x: CGFloat(cell(0) / inputSize), y: CGFloat(cell(1) / inputSize),
+                                 width: CGFloat((cell(2) - cell(0)) / inputSize),
+                                 height: CGFloat((cell(3) - cell(1)) / inputSize))
                 found.append((label: label(for: classIndex), confidence: score, box: box))
             }
             return found

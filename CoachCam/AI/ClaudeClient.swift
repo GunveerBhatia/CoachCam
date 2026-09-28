@@ -90,7 +90,7 @@ enum ClaudeClient {
         case 200: break
         case 401, 403: throw Failure.invalidKey
         case 429: throw Failure.rateLimited(retryAfter: http.value(forHTTPHeaderField: "retry-after"))
-        case 529, 500...599: throw Failure.overloaded
+        case 500...599: throw Failure.overloaded   // includes 529 (overloaded)
         default:
             let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
                 .flatMap { ($0["error"] as? [String: Any])?["message"] as? String } ?? "request failed"

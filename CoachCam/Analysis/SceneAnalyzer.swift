@@ -184,7 +184,8 @@ final class SceneAnalyzer: ObservableObject {
             } else {
                 objects.append(DetectedObject(label: found.label, confidence: found.confidence, box: found.box))
             }
-        }        people.sort { $0.box.area > $1.box.area }   // Biggest (usually closest) first.
+        }
+        people.sort { $0.box.area > $1.box.area }   // Biggest (usually closest) first.
         objects.sort { $0.confidence > $1.confidence }
 
         // Person types (slow ticks, up to 4 largest faces). The tracker smooths these over time.
