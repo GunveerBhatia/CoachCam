@@ -33,8 +33,8 @@ CoachCam/
 | Project | XcodeGen | Text file → .xcodeproj on CI; no Mac needed |
 | CI | GitHub Actions `macos-latest`, public repo | Free, unlimited Mac minutes on public repos |
 | Install | SideStore + iloader + LocalDevVPN | Free Apple ID, refreshes on the phone |
-| Min iOS | **18.0** | Vision's modern Swift API and the Camera Control button API (`AVCaptureControl`) both start at 18. Nothing we plan needs 26+. |
-| People and pose | Vision (`DetectHumanBodyPoseRequest`, face landmarks and face pose) | Built in, fast, free |
+| Min iOS | **18.0** | Camera Control / volume-button capture (`onCameraCaptureEvent`) and `displayVideoZoomFactorMultiplier` need 18. Nothing we plan needs 26+. |
+| People and pose | Vision (`VNDetectHumanBodyPoseRequest`, face rectangles rev. 3 for yaw/roll/pitch, face landmarks) | Built in, fast, free. The long-standing VN API is used (well documented, lower build risk than the newer Swift-only API). |
 | Objects | **YOLO11n** (Ultralytics) exported to Core ML with NMS, about 5–6 MB | Smallest and fastest modern COCO detector; about 2–4 ms on the Neural Engine. COCO covers umbrella, cup, bicycle, car, bench, handbag, bottle, cell phone, pizza, cake, and more. License is AGPL-3.0, which is fine for a personal app you don't distribute. Fallback: Apple's YOLOv3-Tiny Core ML model (MIT license, older, less accurate). |
 | Scene | Vision `ClassifyImageRequest`, `DetectHorizonRequest`, saliency | Built in |
 | Motion | CoreMotion device motion | Gyro, tilt, and pitch for level and food angles |
