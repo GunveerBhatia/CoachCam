@@ -50,21 +50,21 @@ final class CameraService: NSObject, ObservableObject {
     // MARK: AVFoundation objects
 
     let session = AVCaptureSession()
-    private let sessionQueue = DispatchQueue(label: "coachcam.session")
+    let sessionQueue = DispatchQueue(label: "coachcam.session")
     private let videoQueue = DispatchQueue(label: "coachcam.video", qos: .userInitiated)
-    private let photoOutput = AVCapturePhotoOutput()
+    let photoOutput = AVCapturePhotoOutput()
     private let videoOutput = AVCaptureVideoDataOutput()
-    private var videoInput: AVCaptureDeviceInput?
+    private(set) var videoInput: AVCaptureDeviceInput?
     private var isConfigured = false
 
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
-    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private(set) var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var previewRotationObservation: NSKeyValueObservation?
     private var captureRotationObservation: NSKeyValueObservation?
     /// How the phone is held and which camera is active; read by the analysis on other threads.
-    private let frameContext = FrameContext()
+    let frameContext = FrameContext()
     private var lensObservation: NSKeyValueObservation?
-    private var inFlightCaptures: [Int64: PhotoCaptureProcessor] = [:]   // Only touched on sessionQueue.
+    var inFlightCaptures: [Int64: NSObject] = [:]   // Only touched on sessionQueue.
 
     // Frame statistics (only touched on videoQueue).
     private var frameCount = 0
@@ -471,8 +471,9 @@ final class CameraService: NSObject, ObservableObject {
 
     // MARK: - Photo capture
 
-    /// Takes one photo and saves it to your photo library.
-    func capturePhoto() {
+    /// Takes one photo and saves it to your photo library. `quality` comes from the
+    /// automatic settings (M3): .quality lets iOS apply Smart HDR / Deep Fusion.
+    func capturePhoto(quality: AVCapturePhotoOutput.QualityPrioritization = .balanced) {
         // Read the tilt of the phone now (main thread) so the photo is rotated correctly.
         let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 90
         sessionQueue.async {
@@ -490,8 +491,8 @@ final class CameraService: NSObject, ObservableObject {
                 settings = AVCapturePhotoSettings()
             }
             settings.maxPhotoDimensions = self.photoOutput.maxPhotoDimensions
-            // Must not exceed the output's maximum, or AVFoundation throws. (M3 picks this per scene.)
-            let wanted: AVCapturePhotoOutput.QualityPrioritization = .balanced
+            // Must not exceed the output's maximum, or AVFoundation throws.
+            let wanted = quality
             settings.photoQualityPrioritization =
                 wanted.rawValue <= self.photoOutput.maxPhotoQualityPrioritization.rawValue
                 ? wanted : self.photoOutput.maxPhotoQualityPrioritization
@@ -503,12 +504,7 @@ final class CameraService: NSObject, ObservableObject {
 
             let id = settings.uniqueID
             let processor = PhotoCaptureProcessor(
-                willCapture: { [weak self] in
-                    DispatchQueue.main.async {
-                        self?.shutterFlash = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { self?.shutterFlash = false }
-                    }
-                },
+                willCapture: { [weak self] in self?.flashShutter() },
                 completion: { [weak self] result in
                     self?.handleCaptured(result)
                     self?.sessionQueue.async { self?.inFlightCaptures[id] = nil }
@@ -519,7 +515,16 @@ final class CameraService: NSObject, ObservableObject {
         }
     }
 
-    private func handleCaptured(_ result: Result<Data, Error>) {
+    /// Brief black flash on the viewfinder when the shutter fires.
+    func flashShutter() {
+        DispatchQueue.main.async {
+            self.shutterFlash = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { self.shutterFlash = false }
+        }
+    }
+
+    /// Shows the thumbnail and saves the photo (also used by the night merge).
+    func handleCaptured(_ result: Result<Data, Error>) {
         switch result {
         case .failure(let error):
             Log.error("Capture failed: \(error.localizedDescription)")

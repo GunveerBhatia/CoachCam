@@ -72,6 +72,30 @@
     "maxLabels": 6
   },
 
+  "auto": {
+    "_readme": "M3 automatic camera settings. Lens: a new lens must be wanted for lensHoldSeconds before switching, and switches are at least lensMinIntervalSeconds apart; tapping a lens button or pinching turns auto-lens off (badge). Exposure: bias in EV. Low light: enters when ISO >= lowLightEnterISO or brightness < lowLightEnterBrightness, leaves below the exit values. Night merge (burst + align + average) when ISO >= nightMergeISO and the phone is steady (shake < steadyShake). Motion: frame change above fastShutterMotion caps the shutter at fastShutterSeconds. White balance: casts beyond castThreshold (with a face) get a gentle correction.",
+    "lensHoldSeconds": 1.0,
+    "lensMinIntervalSeconds": 2.5,
+    "headshotTooCloseFaceArea": 0.2,
+    "backlitBiasEV": 0.8,
+    "skyBiasEV": -0.7,
+    "exposureUpdateSeconds": 0.5,
+    "lowLightEnterISO": 1600,
+    "lowLightExitISO": 1000,
+    "lowLightEnterBrightness": 0.12,
+    "lowLightExitBrightness": 0.2,
+    "steadyShake": 0.08,
+    "steadyMaxExposureSeconds": 0.125,
+    "nightMergeISO": 3200,
+    "nightMergeFrames": 6,
+    "fastShutterMotion": 0.04,
+    "fastShutterSeconds": 0.004,
+    "castThreshold": 0.06,
+    "castCorrectionKelvin": 400,
+    "castCorrectionTint": 8,
+    "sunsetKelvin": 5500
+  },
+
   "people": {
     "_readme": "Person types (kid, teen, man, woman, older man, older woman) from the on-device model. Below personTypeMinConfidence the label is just 'person'. Smoothing: how much each new reading counts (0-1). A face gone this long is forgotten (with its correction).",
     "personTypeMinConfidence": 0.6,

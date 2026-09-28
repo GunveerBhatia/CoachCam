@@ -55,6 +55,29 @@ struct AppConfig: Decodable {
         var maxLabels: Int
     }
 
+    struct Auto: Decodable {
+        var lensHoldSeconds: Double
+        var lensMinIntervalSeconds: Double
+        var headshotTooCloseFaceArea: Double
+        var backlitBiasEV: Float
+        var skyBiasEV: Float
+        var exposureUpdateSeconds: Double
+        var lowLightEnterISO: Float
+        var lowLightExitISO: Float
+        var lowLightEnterBrightness: Double
+        var lowLightExitBrightness: Double
+        var steadyShake: Double
+        var steadyMaxExposureSeconds: Double
+        var nightMergeISO: Float
+        var nightMergeFrames: Int
+        var fastShutterMotion: Double
+        var fastShutterSeconds: Double
+        var castThreshold: Double
+        var castCorrectionKelvin: Float
+        var castCorrectionTint: Float
+        var sunsetKelvin: Float
+    }
+
     struct People: Decodable {
         var personTypeMinConfidence: Double
         var personTypeSmoothing: Double
@@ -81,6 +104,7 @@ struct AppConfig: Decodable {
     var analysis: Analysis
     var detection: Detection
     var naming: Naming
+    var auto: Auto
     var people: People
     var ai: AI
     var subject: Subject

@@ -20,6 +20,7 @@ struct CameraScreen: View {
     @State private var planner = RulePlanner()
     @State private var personTypes = PersonTypeTracker()
     @State private var objectNames = ObjectLabelTracker()
+    @State private var autoSettings = AutoSettingsEngine()
     @StateObject private var identify = IdentifyController()
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
@@ -44,6 +45,7 @@ struct CameraScreen: View {
                     topBar
                     viewfinder
                     Spacer(minLength: 8)
+                    AutoBadgesRow(engine: autoSettings, camera: camera)
                     lensButtons
                     bottomBar
                 }
@@ -92,6 +94,8 @@ struct CameraScreen: View {
         let planner = self.planner
         let personTypes = self.personTypes
         let objectNames = self.objectNames
+        let autoSettings = self.autoSettings
+        let camera = self.camera
         let motion = self.motion
         camera.frameHandler = { sampleBuffer, info in
             analyzer.submit(sampleBuffer, info: info)
@@ -102,8 +106,13 @@ struct CameraScreen: View {
             personTypes.update(with: analysis)
             objectNames.update(with: analysis)
             let category = photoTypes.effectiveCategory(detected: description.category)
-            planner.update(category: category, photoType: photoTypes.choice(for: category),
+            let photoType = photoTypes.choice(for: category)
+            planner.update(category: category, photoType: photoType,
                            description: description, personTypes: personTypes.currentTypes)
+            // M3: set the camera from the chosen rule + the live scene.
+            autoSettings.update(rule: planner.current?.rule, photoType: photoType, description: description,
+                                analysis: analysis, camera: camera, iso: camera.stats.iso, shake: motion.shake,
+                                subjectBox: describer.subjects.subject?.box)
         }
     }
 
@@ -132,6 +141,7 @@ struct CameraScreen: View {
                 SubjectBrackets(tracker: describer.subjects, camera: camera)
                 if showPersonLabels { PersonLabelsOverlay(tracker: personTypes, camera: camera) }
                 ObjectLabelsOverlay(tracker: objectNames, camera: camera, analyzer: analyzer)
+                HoldStillOverlay(engine: autoSettings)
                 if let point = focusPoint {
                     FocusIndicator(point: point).id(point.x + point.y * 10_000)
                 }
@@ -176,6 +186,7 @@ struct CameraScreen: View {
             .onTapGesture(coordinateSpace: .local) { location in
                 focusPoint = location
                 camera.focus(atLayerPoint: location)
+                autoSettings.userTapped()
                 if let point = camera.uprightPoint(fromLayerPoint: location) {
                     let picked = describer.subjects.select(at: point, in: analyzer.latest)
                     Log.info("Tap → \(picked)")
@@ -212,6 +223,7 @@ struct CameraScreen: View {
                 let start = pinchStartZoom ?? camera.zoom
                 if pinchStartZoom == nil { pinchStartZoom = start }
                 let target = min(max(start * value.magnification, camera.minDisplayZoom), camera.maxDisplayZoom)
+                autoSettings.userChangedLens()
                 camera.setZoom(target, smooth: false)
             }
             .onEnded { _ in pinchStartZoom = nil }
@@ -222,6 +234,7 @@ struct CameraScreen: View {
             ForEach(camera.lensOptions) { option in
                 let selected = isSelected(option)
                 Button {
+                    autoSettings.userChangedLens()
                     camera.setZoom(option.zoom, smooth: true)
                 } label: {
                     Text(selected ? zoomLabel : option.label)
@@ -342,9 +355,20 @@ struct CameraScreen: View {
         }
     }
 
+    /// Takes the picture with the automatic settings: a night merge when it's very dark and
+    /// steady, otherwise one photo at the quality level M3 picked.
     private func shoot() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        camera.capturePhoto()
+        if autoSettings.useNightMerge {
+            guard !autoSettings.holdingStill else { return }
+            autoSettings.holdingStill = true
+            camera.captureNightMerge(frames: AppConfig.shared.auto.nightMergeFrames) { _ in
+                autoSettings.holdingStill = false
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } else {
+            camera.capturePhoto(quality: autoSettings.captureQuality)
+        }
     }
 }
 
