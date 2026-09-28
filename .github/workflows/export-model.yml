@@ -25,8 +25,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Pinned: the newest torch/numpy break coremltools' PyTorch converter
+      # ("only 0-dimensional arrays can be converted to Python scalars").
       - name: Install exporter
-        run: pip install "ultralytics>=8.3" coremltools
+        run: |
+          pip install "torch==2.5.1" "torchvision==0.20.1" "numpy==1.26.4" "coremltools==8.3.0"
+          pip install "ultralytics>=8.3,<8.4"
+          pip install "numpy==1.26.4"
+          python -c "import torch, numpy, coremltools; print(torch.__version__, numpy.__version__, coremltools.__version__)"
 
       - name: Export YOLO11n → Core ML
         run: python scripts/export_yolo.py
