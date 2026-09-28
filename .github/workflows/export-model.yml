@@ -1,0 +1,48 @@
+# One-off job: converts YOLO11n to Core ML and publishes it as the "model-yolo11n"
+# release. The .mlpackage is then committed into CoachCam/Resources/Models/,
+# so normal app builds never re-run this.
+name: Export YOLO model
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "scripts/export_yolo.py"
+      - ".github/workflows/export-model.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install exporter
+        run: pip install "ultralytics>=8.3" coremltools
+
+      - name: Export YOLO11n → Core ML
+        run: python scripts/export_yolo.py
+
+      - name: Zip model
+        run: |
+          ls -la
+          zip -qry yolo11n.mlpackage.zip yolo11n.mlpackage
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete model-yolo11n --cleanup-tag --yes || true
+          gh release create model-yolo11n yolo11n.mlpackage.zip \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "YOLO11n Core ML model" \
+            --notes "Exported by scripts/export_yolo.py. Not an app build."
