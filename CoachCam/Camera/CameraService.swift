@@ -155,7 +155,14 @@ final class CameraService: NSObject, ObservableObject {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
-        session.sessionPreset = .photo   // Full-quality 4:3 photos.
+        // SAFETY RULE for this file: many AVFoundation setters throw Objective-C exceptions
+        // (which Swift can't catch) when a value isn't supported. Every setter below is guarded
+        // by its matching "can…/is…Supported/available…" check first.
+        if session.canSetSessionPreset(.photo) {
+            session.sessionPreset = .photo   // Full-quality 4:3 photos.
+        } else {
+            Log.warn("Photo preset not supported; using the session default")
+        }
 
         guard let device = Self.bestDevice(for: .back) else {
             Log.error("No back camera found")
@@ -169,18 +176,21 @@ final class CameraService: NSObject, ObservableObject {
             return
         }
         session.addOutput(photoOutput)
-        photoOutput.maxPhotoQualityPrioritization = .quality
+        photoOutput.maxPhotoQualityPrioritization = .quality   // Always allowed (it's only a ceiling).
         if photoOutput.isResponsiveCaptureSupported {
             photoOutput.isResponsiveCaptureEnabled = true   // Lets you take photos back to back.
         }
 
         // Frame output for analysis (M2). Late frames are dropped so the camera never backs up.
-        videoOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-        ]
+        // Frame size is left to AVFoundation (deliversPreviewSizedOutputBuffers crashed build 6);
+        // SceneAnalyzer shrinks frames itself before running Vision.
+        let wantedFormat = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        if videoOutput.availableVideoPixelFormatTypes.contains(wantedFormat) {
+            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: wantedFormat]
+        } else {
+            Log.warn("420f frames not available; light meter will be limited")
+        }
         videoOutput.alwaysDiscardsLateVideoFrames = true
-        // Small (screen-sized) frames: plenty for detection and far cheaper than 12 MP ones.
-        videoOutput.deliversPreviewSizedOutputBuffers = true
         videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
@@ -256,7 +266,7 @@ final class CameraService: NSObject, ObservableObject {
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                 device.whiteBalanceMode = .continuousAutoWhiteBalance
             }
-            let oneX = 1 / device.displayVideoZoomFactorMultiplier
+            let oneX = 1 / Self.zoomMultiplier(device)
             device.videoZoomFactor = clampZoomFactor(oneX, for: device)
         } catch {
             Log.error("Couldn't configure device: \(error.localizedDescription)")
@@ -354,7 +364,7 @@ final class CameraService: NSObject, ObservableObject {
 
     /// Which lens buttons make sense for this camera.
     private func availableLenses(for device: AVCaptureDevice) -> [LensOption] {
-        let multiplier = device.displayVideoZoomFactorMultiplier
+        let multiplier = Self.zoomMultiplier(device)
         let minDisplay = device.minAvailableVideoZoomFactor * multiplier
         let maxDisplay = min(device.maxAvailableVideoZoomFactor, device.activeFormat.videoMaxZoomFactor) * multiplier
         let candidates: [CGFloat] = device.position == .front ? [1, 2] : [0.5, 1, 2, 4, 8]
@@ -364,7 +374,13 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     private func displayZoom(of device: AVCaptureDevice) -> CGFloat {
-        device.videoZoomFactor * device.displayVideoZoomFactorMultiplier
+        device.videoZoomFactor * Self.zoomMultiplier(device)
+    }
+
+    /// Display zoom = videoZoomFactor × this (0.5 on the triple camera). Never 0, so no bad math.
+    static func zoomMultiplier(_ device: AVCaptureDevice) -> CGFloat {
+        let m = device.displayVideoZoomFactorMultiplier
+        return m > 0 ? m : 1
     }
 
     private func clampZoomFactor(_ factor: CGFloat, for device: AVCaptureDevice) -> CGFloat {
@@ -376,12 +392,12 @@ final class CameraService: NSObject, ObservableObject {
     var maxDisplayZoom: CGFloat {
         guard let device = videoInput?.device else { return 1 }
         let upper = min(device.maxAvailableVideoZoomFactor, device.activeFormat.videoMaxZoomFactor)
-        return min(upper * device.displayVideoZoomFactorMultiplier, 16)
+        return min(upper * Self.zoomMultiplier(device), 16)
     }
 
     var minDisplayZoom: CGFloat {
         guard let device = videoInput?.device else { return 1 }
-        return device.minAvailableVideoZoomFactor * device.displayVideoZoomFactorMultiplier
+        return device.minAvailableVideoZoomFactor * Self.zoomMultiplier(device)
     }
 
     /// Sets the zoom in display units (0.5, 1, 2, 4, 8…).
@@ -389,7 +405,7 @@ final class CameraService: NSObject, ObservableObject {
     func setZoom(_ display: CGFloat, smooth: Bool) {
         sessionQueue.async {
             guard let device = self.videoInput?.device else { return }
-            let factor = self.clampZoomFactor(display / device.displayVideoZoomFactorMultiplier, for: device)
+            let factor = self.clampZoomFactor(display / Self.zoomMultiplier(device), for: device)
             do {
                 try device.lockForConfiguration()
                 if smooth {
@@ -402,7 +418,7 @@ final class CameraService: NSObject, ObservableObject {
             } catch {
                 Log.error("Zoom failed: \(error.localizedDescription)")
             }
-            let newZoom = factor * device.displayVideoZoomFactorMultiplier
+            let newZoom = factor * Self.zoomMultiplier(device)
             DispatchQueue.main.async { self.zoom = newZoom }
         }
     }
@@ -460,7 +476,13 @@ final class CameraService: NSObject, ObservableObject {
         // Read the tilt of the phone now (main thread) so the photo is rotated correctly.
         let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 90
         sessionQueue.async {
-            guard self.session.isRunning else { return }
+            // capturePhoto throws an exception if there's no live, enabled video connection.
+            guard self.session.isRunning,
+                  let photoConnection = self.photoOutput.connection(with: .video),
+                  photoConnection.isEnabled, photoConnection.isActive else {
+                Log.warn("Shutter ignored: camera not ready")
+                return
+            }
             let settings: AVCapturePhotoSettings
             if self.photoOutput.availablePhotoCodecTypes.contains(.hevc) {
                 settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
@@ -468,7 +490,11 @@ final class CameraService: NSObject, ObservableObject {
                 settings = AVCapturePhotoSettings()
             }
             settings.maxPhotoDimensions = self.photoOutput.maxPhotoDimensions
-            settings.photoQualityPrioritization = .balanced   // M3 will pick this per scene.
+            // Must not exceed the output's maximum, or AVFoundation throws. (M3 picks this per scene.)
+            let wanted: AVCapturePhotoOutput.QualityPrioritization = .balanced
+            settings.photoQualityPrioritization =
+                wanted.rawValue <= self.photoOutput.maxPhotoQualityPrioritization.rawValue
+                ? wanted : self.photoOutput.maxPhotoQualityPrioritization
 
             if let connection = self.photoOutput.connection(with: .video),
                connection.isVideoRotationAngleSupported(angle) {

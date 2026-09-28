@@ -36,6 +36,7 @@ final class SceneAnalyzer: ObservableObject {
         return r
     }()
     private let lightMeter = LightMeter()
+    private let downscaler = FrameDownscaler()
     private var slowLabels: [(label: String, confidence: Float)] = []
     private var slowHorizon: Double?
     private var slowSalient: CGRect?
@@ -117,7 +118,9 @@ final class SceneAnalyzer: ObservableObject {
         tick += 1
         let isSlowTick = tick % max(1, config.analysis.slowEveryNthTick) == 1 || config.analysis.slowEveryNthTick <= 1
 
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: geometry.visionOrientation,
+        // Vision works on a shrunken copy; normalized coordinates are the same either way.
+        let visionBuffer = downscaler.scaled(pixelBuffer, maxDimension: config.analysis.maxVisionDimension)
+        let handler = VNImageRequestHandler(cvPixelBuffer: visionBuffer, orientation: geometry.visionOrientation,
                                             options: [:])
         var requests: [VNRequest] = [bodyRequest, faceRequest]
         if let yolo = yoloRequest { requests.append(yolo) }

@@ -5,6 +5,7 @@ import Foundation
 struct AppConfig: Decodable {
     struct Analysis: Decodable {
         var fastHz: Double
+        var maxVisionDimension: Int
         var slowEveryNthTick: Int
         var objectConfidence: Float
         var bodyJointConfidence: Float

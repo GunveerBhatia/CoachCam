@@ -102,5 +102,49 @@ final class LogStore: ObservableObject {
             let stack = exception.callStackSymbols.prefix(20).joined(separator: "\n")
             LogStore.shared.writeNow("\(exception.name.rawValue): \(exception.reason ?? "no reason")\n\(stack)")
         }
+        installSignalHandlers()
     }
+
+    /// Also catches crashes that aren't Objective-C exceptions: Swift errors (force-unwrap
+    /// of nil, index out of range, fatalError), bad memory access, and abort(). Writes a
+    /// line and a raw stack trace to the log file, then lets the app crash normally so iOS
+    /// still records its own crash report.
+    private static func installSignalHandlers() {
+        crashLogFD = open(shared.fileURL.path, O_WRONLY | O_APPEND)
+        for sig in [SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGFPE] {
+            signal(sig, crashSignalHandler)
+        }
+    }
+}
+
+// MARK: - Low-level crash handler
+// Signal handlers may only do very basic things (no memory allocation, no Swift strings),
+// so everything they need is prepared in advance: an open file descriptor, a buffer for
+// the stack trace, and fixed messages.
+
+private var crashLogFD: Int32 = -1
+private let crashFrames = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: 64)
+
+private func writeCrashMessage(_ message: StaticString) {
+    guard crashLogFD >= 0 else { return }
+    _ = write(crashLogFD, message.utf8Start, message.utf8CodeUnitCount)
+}
+
+private func crashSignalHandler(_ sig: Int32) {
+    switch sig {
+    case SIGABRT: writeCrashMessage("\n[CRASH] SIGABRT (abort, often an uncaught exception)\n")
+    case SIGSEGV: writeCrashMessage("\n[CRASH] SIGSEGV (bad memory access)\n")
+    case SIGBUS: writeCrashMessage("\n[CRASH] SIGBUS (bad memory access)\n")
+    case SIGILL: writeCrashMessage("\n[CRASH] SIGILL (illegal instruction)\n")
+    case SIGTRAP: writeCrashMessage("\n[CRASH] SIGTRAP (Swift runtime error: nil unwrap, out of range, fatalError)\n")
+    case SIGFPE: writeCrashMessage("\n[CRASH] SIGFPE (arithmetic error)\n")
+    default: writeCrashMessage("\n[CRASH] signal\n")
+    }
+    if crashLogFD >= 0 {
+        let count = backtrace(crashFrames, 64)
+        backtrace_symbols_fd(crashFrames, count, crashLogFD)
+    }
+    // Hand the signal back to iOS so the normal crash report is still created.
+    signal(sig, SIG_DFL)
+    raise(sig)
 }

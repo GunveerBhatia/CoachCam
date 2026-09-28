@@ -4,6 +4,7 @@
   "analysis": {
     "_readme": "How often the live feed is analyzed. Fast = people, faces, objects. Slow = scene labels, horizon, saliency, face landmarks.",
     "fastHz": 12,
+    "maxVisionDimension": 1280,
     "slowEveryNthTick": 4,
     "objectConfidence": 0.35,
     "bodyJointConfidence": 0.3,
