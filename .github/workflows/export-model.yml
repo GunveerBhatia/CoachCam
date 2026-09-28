@@ -1,54 +1,68 @@
-# One-off job: converts YOLO11n to Core ML and publishes it as the "model-yolo11n"
-# release. The .mlpackage is then committed into CoachCam/Resources/Models/,
-# so normal app builds never re-run this.
-name: Export YOLO model
+# Converts the on-device models to Core ML on a macOS runner and publishes each as a
+# release ("model-yoloe", "model-person-type") so they can be inspected or committed.
+# Normal app builds don't need this: build.yml builds the YOLOE detector itself (cached),
+# and PersonType.mlpackage is committed to the repo.
+name: Export models
 
 on:
   workflow_dispatch: {}
   push:
     branches: [main]
     paths:
-      - "scripts/export_yolo.py"
+      - "scripts/export_yoloe.py"
+      - "scripts/export_person_type.py"
       - ".github/workflows/export-model.yml"
 
 permissions:
   contents: write
 
+env:
+  # Pinned: newer torch/numpy break coremltools' PyTorch converter.
+  PIP_PINS: '"torch==2.5.1" "torchvision==0.20.1" "numpy==1.26.4" "coremltools==8.3.0"'
+
 jobs:
-  export:
+  yoloe:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      # Pinned: the newest torch/numpy break coremltools' PyTorch converter
-      # ("only 0-dimensional arrays can be converted to Python scalars").
       - name: Install exporter
         run: |
-          pip install "torch==2.5.1" "torchvision==0.20.1" "numpy==1.26.4" "coremltools==8.3.0"
-          pip install "ultralytics>=8.3,<8.4"
-          pip install "numpy==1.26.4"
-          python -c "import torch, numpy, coremltools; print(torch.__version__, numpy.__version__, coremltools.__version__)"
-
-      - name: Export YOLO11n → Core ML
-        run: python scripts/export_yolo.py
-
-      - name: Zip model
-        run: |
-          ls -la
-          zip -qry yolo11n.mlpackage.zip yolo11n.mlpackage
-
-      - name: Publish release
+          eval pip install $PIP_PINS
+          pip install "ultralytics>=8.4,<8.5"
+          eval pip install $PIP_PINS
+      - name: Export YOLOE with vocabulary.json
+        run: python scripts/export_yoloe.py
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete model-yolo11n --cleanup-tag --yes || true
-          gh release create model-yolo11n yolo11n.mlpackage.zip \
-            --prerelease \
-            --target "${{ github.sha }}" \
-            --title "YOLO11n Core ML model" \
-            --notes "Exported by scripts/export_yolo.py. Not an app build."
+          cd CoachCam/Resources/Models && zip -qry "$GITHUB_WORKSPACE/yoloe.mlpackage.zip" yoloe.mlpackage && cd -
+          gh release delete model-yoloe --cleanup-tag --yes || true
+          gh release create model-yoloe yoloe.mlpackage.zip --prerelease --target "${{ github.sha }}" \
+            --title "YOLOE Core ML model" --notes "From scripts/export_yoloe.py. Not an app build."
+
+  person-type:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install exporter
+        run: |
+          eval pip install $PIP_PINS gdown
+      - name: Export FairFace (gender + age only)
+        run: python scripts/export_person_type.py
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd CoachCam/Resources/Models && zip -qry "$GITHUB_WORKSPACE/PersonType.mlpackage.zip" PersonType.mlpackage && cd -
+          gh release delete model-person-type --cleanup-tag --yes || true
+          gh release create model-person-type PersonType.mlpackage.zip --prerelease --target "${{ github.sha }}" \
+            --title "Person type Core ML model" --notes "From scripts/export_person_type.py (FairFace, CC BY 4.0, race removed). Not an app build."
