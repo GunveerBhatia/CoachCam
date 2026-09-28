@@ -1,0 +1,42 @@
+# Research only: measures the prompt-free YOLOE models (size, vocabulary coverage, outputs).
+# Publishes the report + models as the "research-yoloe-pf" release. Doesn't touch the app.
+name: Research prompt-free YOLOE
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "scripts/export_yoloe_pf.py"
+      - ".github/workflows/research-pf.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install exporter
+        run: |
+          pip install "torch==2.5.1" "torchvision==0.20.1" "numpy==1.26.4" "coremltools==8.3.0"
+          pip install "ultralytics>=8.4,<8.5"
+          pip install "numpy==1.26.4"
+      - name: Export and measure
+        run: python scripts/export_yoloe_pf.py
+      - name: Publish report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip -qry yoloe-26n-pf.mlpackage.zip yoloe-26n-pf.mlpackage
+          zip -qry yoloe-26s-pf.mlpackage.zip yoloe-26s-pf.mlpackage
+          gh release delete research-yoloe-pf --cleanup-tag --yes || true
+          gh release create research-yoloe-pf pf-report.txt pf-names-26n.txt pf-names-26s.txt \
+            yoloe-26n-pf.mlpackage.zip yoloe-26s-pf.mlpackage.zip \
+            --prerelease --target "${{ github.sha }}" --title "Research: prompt-free YOLOE" \
+            --notes "Size and vocabulary check. Not an app build."
