@@ -63,6 +63,30 @@ final class SceneAnalyzer: ObservableObject {
         DispatchQueue.main.async { self.modelStatus = status }
     }
 
+    /// Upright rect (top-left origin) → Vision rect (bottom-left origin), clipped to the frame.
+    static func visionRect(fromUpright rect: CGRect) -> CGRect {
+        let r = rect.clampedToUnit
+        return CGRect(x: r.minX, y: 1 - r.maxY, width: r.width, height: r.height)
+    }
+
+    /// Image fingerprint of part of the last frame (for remembering names). Takes a few ms.
+    func featurePrint(crop: CGRect) -> VNFeaturePrintObservation? {
+        frameLock.lock()
+        let frame = lastFrame
+        frameLock.unlock()
+        guard let frame else { return nil }
+        let request = VNGenerateImageFeaturePrintRequest()
+        request.regionOfInterest = Self.visionRect(fromUpright: crop)
+        request.imageCropAndScaleOption = .scaleFill
+        do {
+            try VNImageRequestHandler(ciImage: frame, options: [:]).perform([request])
+        } catch {
+            Log.warn("Fingerprint failed: \(error.localizedDescription)")
+            return nil
+        }
+        return request.results?.first
+    }
+
     // MARK: - Snapshot for "Identify with AI"
 
     /// A JPEG of part of the last analyzed frame. `crop` is in upright coordinates (0–1,
@@ -187,6 +211,35 @@ final class SceneAnalyzer: ObservableObject {
         }
         people.sort { $0.box.area > $1.box.area }   // Biggest (usually closest) first.
         objects.sort { $0.confidence > $1.confidence }
+
+        // Naming help (slow ticks, the largest few objects): Apple's classifier on a crop of just
+        // the object, and a fingerprint check against names you/Claude gave before.
+        if isSlowTick && !objects.isEmpty {
+            let naming = config.naming
+            let order = objects.indices.sorted { objects[$0].box.area > objects[$1].box.area }
+            for i in order.prefix(naming.objectsPerSlowTick) {
+                let roi = Self.visionRect(fromUpright: objects[i].box)
+                let classify = VNClassifyImageRequest()
+                classify.regionOfInterest = roi
+                let fingerprint = VNGenerateImageFeaturePrintRequest()
+                fingerprint.regionOfInterest = roi
+                fingerprint.imageCropAndScaleOption = .scaleFill
+                let needsClassifier = objects[i].confidence < naming.detectorConfident
+                do {
+                    try handler.perform(needsClassifier ? [classify, fingerprint] : [fingerprint])
+                } catch {
+                    logOnce("Naming error: \(error.localizedDescription)")
+                    continue
+                }
+                if needsClassifier, let top = classify.results?.first, top.confidence >= naming.cropClassifierMin {
+                    objects[i].cropLabel = top.identifier.replacingOccurrences(of: "_", with: " ")
+                    objects[i].cropConfidence = top.confidence
+                }
+                if let print = fingerprint.results?.first {
+                    objects[i].remembered = ObjectMemory.shared.bestMatch(for: print, maxDistance: naming.memoryMatchDistance)
+                }
+            }
+        }
 
         // Person types (slow ticks, up to 4 largest faces). The tracker smooths these over time.
         if isSlowTick {

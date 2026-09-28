@@ -60,6 +60,18 @@
     "sideLightDifference": 0.12
   },
 
+  "naming": {
+    "_readme": "Naming chain for objects, all on the phone: (1) live detector; (2) Apple's classifier on a crop of just the object when the detector is unsure; (3) a fingerprint match against names you or Claude gave before (your corrections win). Label shows plainly at >= confidentShow, with '?' at >= mediumShow. memoryMatchDistance: how similar a fingerprint must be (smaller = stricter; the debug log shows distances).",
+    "detectorConfident": 0.5,
+    "cropClassifierMin": 0.3,
+    "cropConfident": 0.6,
+    "confidentShow": 0.5,
+    "mediumShow": 0.25,
+    "objectsPerSlowTick": 2,
+    "memoryMatchDistance": 0.6,
+    "maxLabels": 6
+  },
+
   "people": {
     "_readme": "Person types (kid, teen, man, woman, older man, older woman) from the on-device model. Below personTypeMinConfidence the label is just 'person'. Smoothing: how much each new reading counts (0-1). A face gone this long is forgotten (with its correction).",
     "personTypeMinConfidence": 0.6,

@@ -6,6 +6,8 @@ import SwiftUI
 struct ShotPicker: View {
     @ObservedObject var describer: SceneDescriber
     @ObservedObject var store: PhotoTypeStore
+    /// Names the main object, so the button says e.g. "keys" instead of "Object".
+    @ObservedObject var objectNames: ObjectLabelTracker
 
     var body: some View {
         let category = store.effectiveCategory(detected: describer.category)
@@ -51,7 +53,7 @@ struct ShotPicker: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: category.icon)
-                Text(category.title)
+                Text(subjectTitle(for: category))
                 if category != .general {
                     Text("·").foregroundStyle(.white.opacity(0.6))
                     Text(chosen?.title ?? "Pick type")
@@ -75,6 +77,12 @@ struct ShotPicker: View {
             .background(.white.opacity(0.15), in: Capsule())
             .animation(.easeOut(duration: 0.15), value: category)
         }
+    }
+
+    /// "keys" / "pasta?" for objects and food (never just "Object"), otherwise the category.
+    private func subjectTitle(for category: SubjectCategory) -> String {
+        if category == .object || category == .food, let name = objectNames.mainName { return name }
+        return category.title
     }
 
     /// Only the types that fit what's detected. "Mirror fit" needs a mirror cue

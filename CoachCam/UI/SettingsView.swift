@@ -5,6 +5,9 @@ struct SettingsView: View {
     let camera: CameraService
     @ObservedObject var corrections: PersonTypeCorrections
     @ObservedObject var aiNames: AINameHistory
+    @ObservedObject private var usage = APIUsage.shared
+    @State private var memoryCounts = ObjectMemory.shared.counts()
+    @State private var confirmResetMemory = false
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
@@ -56,10 +59,24 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).count < 20)
+                    LabeledContent("API calls this week", value: "\(usage.thisWeek)")
+                    LabeledContent("API calls total", value: "\(usage.total)")
+                    LabeledContent("Answered from memory (free)", value: "\(usage.cacheHits)")
                 } header: {
                     Text("Claude API (Identify with AI)")
                 } footer: {
                     Text("Stored in the iPhone Keychain, never in the app's code. Claude is only contacted when you tap an AI button. Model: \(AppConfig.shared.ai.model).")
+                }
+
+                Section {
+                    LabeledContent("Your corrections", value: "\(memoryCounts.yours)")
+                    LabeledContent("Saved AI answers", value: "\(memoryCounts.ai)")
+                    Button("Forget saved object names", role: .destructive) { confirmResetMemory = true }
+                        .disabled(memoryCounts.yours + memoryCounts.ai == 0)
+                } header: {
+                    Text("Object names")
+                } footer: {
+                    Text("Objects are named on the phone first (detector → Apple classifier → your saved names → Apple Look Up). Claude is only asked when you tap Identify with AI, and every answer is saved so similar objects don't need another call.")
                 }
 
                 Section {
@@ -103,6 +120,13 @@ struct SettingsView: View {
             .confirmationDialog("Delete all your person-type corrections?", isPresented: $confirmResetCorrections,
                                 titleVisibility: .visible) {
                 Button("Reset corrections", role: .destructive) { corrections.reset() }
+            }
+            .confirmationDialog("Forget all saved object names (yours and AI answers)?", isPresented: $confirmResetMemory,
+                                titleVisibility: .visible) {
+                Button("Forget names", role: .destructive) {
+                    ObjectMemory.shared.reset()
+                    memoryCounts = ObjectMemory.shared.counts()
+                }
             }
         }
     }

@@ -19,6 +19,7 @@ struct CameraScreen: View {
     @State private var analyzer = SceneAnalyzer()
     @State private var planner = RulePlanner()
     @State private var personTypes = PersonTypeTracker()
+    @State private var objectNames = ObjectLabelTracker()
     @StateObject private var identify = IdentifyController()
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
@@ -90,6 +91,7 @@ struct CameraScreen: View {
         let photoTypes = self.photoTypes
         let planner = self.planner
         let personTypes = self.personTypes
+        let objectNames = self.objectNames
         let motion = self.motion
         camera.frameHandler = { sampleBuffer, info in
             analyzer.submit(sampleBuffer, info: info)
@@ -98,6 +100,7 @@ struct CameraScreen: View {
             let description = describer.ingest(analysis, cameraPitch: motion.cameraPitch,
                                                levelError: motion.levelError)
             personTypes.update(with: analysis)
+            objectNames.update(with: analysis)
             let category = photoTypes.effectiveCategory(detected: description.category)
             planner.update(category: category, photoType: photoTypes.choice(for: category),
                            description: description, personTypes: personTypes.currentTypes)
@@ -106,7 +109,7 @@ struct CameraScreen: View {
 
     private var topBar: some View {
         HStack {
-            ShotPicker(describer: describer, store: photoTypes)
+            ShotPicker(describer: describer, store: photoTypes, objectNames: objectNames)
             Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill")
@@ -128,6 +131,7 @@ struct CameraScreen: View {
                 if showDebugOverlay { DetectionOverlay(analyzer: analyzer, camera: camera) }
                 SubjectBrackets(tracker: describer.subjects, camera: camera)
                 if showPersonLabels { PersonLabelsOverlay(tracker: personTypes, camera: camera) }
+                ObjectLabelsOverlay(tracker: objectNames, camera: camera, analyzer: analyzer)
                 if let point = focusPoint {
                     FocusIndicator(point: point).id(point.x + point.y * 10_000)
                 }
@@ -147,7 +151,7 @@ struct CameraScreen: View {
                 }
                 VStack {
                     Spacer()
-                    IdentifyBar(controller: identify, analyzer: analyzer)
+                    IdentifyBar(controller: identify, analyzer: analyzer, tracker: objectNames)
                 }
                 if photosBlocked {
                     VStack {
@@ -185,27 +189,23 @@ struct CameraScreen: View {
         .clipped()
     }
 
-    /// Offers "Identify with AI" when the tapped thing isn't confidently named on the phone:
-    /// a low-confidence object, or nothing detected at all (and not a person).
+    /// After a tap: if the thing isn't confidently named on the phone, offer the free
+    /// "Look Up" (then "Identify with AI" only if that fails). Named things and people: nothing.
     private func offerIdentify(at point: CGPoint) {
-        let latest = analyzer.latest
-        let tappedObject = latest.objects.filter { $0.box.contains(point) }.min { $0.box.area < $1.box.area }
-        let tappedPerson = latest.people.contains { $0.box.contains(point) }
-        if let object = tappedObject {
-            if object.confidence < AppConfig.shared.ai.identifyBelowConfidence {
-                identify.offer(region: object.box, localGuess: object.label)
-            } else {
+        if let label = objectNames.label(at: point) {
+            if label.sure {
                 identify.dismiss()
+            } else {
+                identify.offer(region: label.box, labelID: label.id, localGuess: label.name)
             }
-        } else if !tappedPerson {
+        } else if !analyzer.latest.people.contains(where: { $0.box.contains(point) }) {
             let side: CGFloat = 0.3
             identify.offer(region: CGRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side)
-                .clampedToUnit, localGuess: nil)
+                .clampedToUnit, labelID: nil, localGuess: nil)
         } else {
             identify.dismiss()
         }
     }
-
     private var pinchToZoom: some Gesture {
         MagnifyGesture()
             .onChanged { value in

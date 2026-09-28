@@ -9,9 +9,15 @@ import Foundation
 /// One object found by YOLO (e.g. "umbrella", "cup").
 struct DetectedObject: Identifiable {
     let id = UUID()
+    /// The live detector's word and confidence.
     let label: String
     let confidence: Float
     let box: CGRect
+    /// Apple's image classifier run on a crop of just this object (slow ticks, unsure objects).
+    var cropLabel: String?
+    var cropConfidence: Float = 0
+    /// A remembered name (your correction or a cached AI answer) whose fingerprint matches.
+    var remembered: ObjectMemory.Match?
 }
 
 /// One person: body joints, face, and simple measurements.

@@ -44,6 +44,17 @@ struct AppConfig: Decodable {
         var sideLightDifference: Double
     }
 
+    struct Naming: Decodable {
+        var detectorConfident: Float
+        var cropClassifierMin: Float
+        var cropConfident: Float
+        var confidentShow: Float
+        var mediumShow: Float
+        var objectsPerSlowTick: Int
+        var memoryMatchDistance: Float
+        var maxLabels: Int
+    }
+
     struct People: Decodable {
         var personTypeMinConfidence: Double
         var personTypeSmoothing: Double
@@ -69,6 +80,7 @@ struct AppConfig: Decodable {
 
     var analysis: Analysis
     var detection: Detection
+    var naming: Naming
     var people: People
     var ai: AI
     var subject: Subject
