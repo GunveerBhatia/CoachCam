@@ -10,7 +10,7 @@ Output "probs" (11 numbers):
   [0] male, [1] female                                   (softmax)
   [2..10] age 0-2, 3-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70+   (softmax)
 
-Writes CoachCam/Resources/Models/PersonType.mlpackage. Run once on a GitHub macOS runner.
+Writes CoachCam/Resources/Models/PersonTypeModel.mlpackage (not 'PersonType': Xcode generates a Swift class named after the model, which would clash with the PersonType enum). Run once on a GitHub macOS runner.
 """
 from pathlib import Path
 
@@ -21,7 +21,7 @@ import torchvision
 from coremltools.optimize.coreml import OpLinearQuantizerConfig, OptimizationConfig, linear_quantize_weights
 
 ROOT = Path(__file__).resolve().parents[1]
-DEST = ROOT / "CoachCam" / "Resources" / "Models" / "PersonType.mlpackage"
+DEST = ROOT / "CoachCam" / "Resources" / "Models" / "PersonTypeModel.mlpackage"
 WEIGHTS = Path("res34_fair_align_multi_7_20190809.pt")
 
 if not WEIGHTS.exists():

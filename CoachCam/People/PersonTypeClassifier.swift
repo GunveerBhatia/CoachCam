@@ -13,7 +13,7 @@ final class PersonTypeClassifier {
     private func loadIfNeeded() {
         guard !attempted else { return }
         attempted = true
-        guard let url = Bundle.main.url(forResource: "PersonType", withExtension: "mlmodelc") else {
+        guard let url = Bundle.main.url(forResource: "PersonTypeModel", withExtension: "mlmodelc") else {
             status = "missing"
             Log.warn("Person-type model not in app; people will be labelled 'person'")
             return

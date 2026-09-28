@@ -1,7 +1,7 @@
 # Converts the on-device models to Core ML on a macOS runner and publishes each as a
 # release ("model-yoloe", "model-person-type") so they can be inspected or committed.
 # Normal app builds don't need this: build.yml builds the YOLOE detector itself (cached),
-# and PersonType.mlpackage is committed to the repo.
+# and PersonTypeModel.mlpackage is committed to the repo.
 name: Export models
 
 on:
@@ -62,7 +62,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd CoachCam/Resources/Models && zip -qry "$GITHUB_WORKSPACE/PersonType.mlpackage.zip" PersonType.mlpackage && cd -
+          cd CoachCam/Resources/Models && zip -qry "$GITHUB_WORKSPACE/PersonTypeModel.mlpackage.zip" PersonTypeModel.mlpackage && cd -
           gh release delete model-person-type --cleanup-tag --yes || true
-          gh release create model-person-type PersonType.mlpackage.zip --prerelease --target "${{ github.sha }}" \
+          gh release create model-person-type PersonTypeModel.mlpackage.zip --prerelease --target "${{ github.sha }}" \
             --title "Person type Core ML model" --notes "From scripts/export_person_type.py (FairFace, CC BY 4.0, race removed). Not an app build."
