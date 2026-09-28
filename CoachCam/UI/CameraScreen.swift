@@ -19,6 +19,7 @@ struct CameraScreen: View {
     @State private var showSettings = false
     @State private var focusPoint: CGPoint?
     @State private var pinchStartZoom: CGFloat?
+    @State private var photosBlocked = false   // True when Photos access is denied/restricted.
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -47,15 +48,18 @@ struct CameraScreen: View {
         .onAppear {
             camera.start()
             motion.start()
+            refreshPhotosBlocked()
             UIApplication.shared.isIdleTimerDisabled = true   // Keep the screen on while shooting.
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
+                // iOS pauses the camera in the background and resumes it on return;
+                // start() makes sure it really did (and retries if not).
                 camera.start()
                 motion.start()
+                refreshPhotosBlocked()   // You may have changed it in Settings.
             case .background:
-                camera.stop()
                 motion.stop()
             default:
                 break
@@ -101,7 +105,12 @@ struct CameraScreen: View {
                     }
                     .padding(6)
                 }
-                if let message = camera.lastSaveMessage {
+                if photosBlocked {
+                    VStack {
+                        Spacer()
+                        photosBlockedBanner
+                    }
+                } else if let message = camera.lastSaveMessage {
                     VStack {
                         Spacer()
                         Text(message)
@@ -217,7 +226,51 @@ struct CameraScreen: View {
         .padding()
     }
 
+    /// Shown when Photos access is off, so photos can't be saved.
+    private var photosBlockedBanner: some View {
+        VStack(spacing: 6) {
+            Text("Photos access is off — photos can't be saved")
+                .font(.footnote.bold())
+                .multilineTextAlignment(.center)
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+            .font(.footnote.bold())
+            .buttonStyle(.borderedProminent)
+            .tint(.white)
+            .foregroundStyle(.black)
+        }
+        .foregroundStyle(.white)
+        .padding(10)
+        .background(.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
+        .padding(10)
+    }
+
+    private func refreshPhotosBlocked() {
+        let status = PhotoLibrary.addStatus
+        photosBlocked = status == .denied || status == .restricted
+    }
+
+    /// Shutter pressed. The first time, this is where the Photos permission pop-up appears;
+    /// the photo is taken as soon as you tap Allow.
     private func takePhoto() {
+        switch PhotoLibrary.addStatus {
+        case .notDetermined:
+            Task { @MainActor in
+                let status = await PhotoLibrary.requestAddAccess()
+                refreshPhotosBlocked()
+                if status == .authorized || status == .limited { shoot() }
+            }
+        case .denied, .restricted:
+            Log.warn("Shutter pressed but Photos access is \(PhotoLibrary.name(of: PhotoLibrary.addStatus))")
+            photosBlocked = true
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        default:
+            shoot()
+        }
+    }
+
+    private func shoot() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         camera.capturePhoto()
     }

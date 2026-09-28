@@ -19,8 +19,13 @@ struct GridOverlay: View {
     }
 }
 
-/// A line across the middle that shows how tilted the phone is.
-/// It turns green and snaps flat when you're within the tolerance.
+/// A line across the middle that always shows the real-world horizon, whether you hold
+/// the phone upright or sideways. It turns green and snaps straight when you're within the
+/// tolerance of level.
+///
+/// How: the app's screen is locked to portrait, so when the phone is rotated by `roll`
+/// degrees the horizon appears rotated by `-roll` on screen. Sideways (roll ≈ ±90°) the
+/// line is drawn along the screen's long side, which is horizontal in your hands.
 struct LevelOverlay: View {
     @ObservedObject var motion: MotionService
     /// Degrees counted as "level". (Moves to config.json in M4.)
@@ -28,6 +33,9 @@ struct LevelOverlay: View {
 
     var body: some View {
         let isLevel = abs(motion.levelError) <= tolerance
+        // Snap to exactly portrait/landscape when level, otherwise follow the real tilt.
+        let nearestRightAngle = motion.rollDegrees - motion.levelError
+        let angle = isLevel ? -nearestRightAngle : -motion.rollDegrees
         // Hide when the phone points mostly up or down (a level line makes no sense then).
         let visible = abs(motion.cameraPitch) < 60
         HStack(spacing: 0) {
@@ -36,8 +44,7 @@ struct LevelOverlay: View {
             Rectangle().frame(width: 40, height: 1.5)
         }
         .foregroundStyle(isLevel ? Color.green : Color.white.opacity(0.8))
-        .rotationEffect(.degrees(isLevel ? 0 : -motion.levelError))
-        .animation(.easeOut(duration: 0.1), value: motion.levelError)
+        .rotationEffect(.degrees(angle))
         .opacity(visible ? 1 : 0)
         .allowsHitTesting(false)
     }

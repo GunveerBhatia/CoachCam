@@ -21,6 +21,7 @@ struct SettingsView: View {
                     Toggle("Debug overlay", isOn: $showDebugOverlay)
                     NavigationLink("Debug log") { LogView() }
                     NavigationLink("Camera capabilities") { CapabilitiesView(camera: camera) }
+                    LabeledContent("Photos access", value: PhotoLibrary.name(of: PhotoLibrary.addStatus))
                 }
 
                 Section("About") {

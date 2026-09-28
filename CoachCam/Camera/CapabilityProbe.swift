@@ -73,6 +73,38 @@ enum CapabilityProbe {
             add("")
         }
 
+        // Manual exposure is decided per camera. The virtual Triple Camera may say "no"
+        // while the physical lenses (used on their own) say "yes"; M3 depends on this.
+        add("== Exposure control per camera ==")
+        let exposureTypes: [AVCaptureDevice.DeviceType] = [
+            .builtInTripleCamera, .builtInUltraWideCamera, .builtInWideAngleCamera, .builtInTelephotoCamera
+        ]
+        let exposureDiscovery = AVCaptureDevice.DiscoverySession(deviceTypes: exposureTypes, mediaType: .video,
+                                                                 position: .back)
+        for type in exposureTypes {
+            guard let cam = exposureDiscovery.devices.first(where: { $0.deviceType == type }) else { continue }
+            let f = cam.activeFormat
+            let aperture = cam.lensAperture > 0 ? String(format: "f/%.2f", cam.lensAperture) : "not reported"
+            add("• \(cam.localizedName) (aperture \(aperture))")
+            add("    manual exposure (custom ISO+shutter): \(yesNo(cam.isExposureModeSupported(.custom)))")
+            add("    lock exposure: \(yesNo(cam.isExposureModeSupported(.locked)))")
+            add(String(format: "    ISO %.0f–%.0f · shutter up to %.3f s", f.minISO, f.maxISO,
+                       CMTimeGetSeconds(f.maxExposureDuration)))
+            add(String(format: "    exposure compensation: %+.1f to %+.1f EV", cam.minExposureTargetBias,
+                       cam.maxExposureTargetBias))
+            add("    face-driven auto exposure: \(yesNo(cam.isFaceDrivenAutoExposureEnabled))")
+            add("    manual focus: \(yesNo(cam.isLockingFocusWithCustomLensPositionSupported))" +
+                " · manual white balance: \(yesNo(cam.isLockingWhiteBalanceWithCustomDeviceGainsSupported))")
+        }
+        add("(Without manual exposure we can still: bias exposure ±EV, meter on a point/face,")
+        add(" cap the auto shutter speed with activeMaxExposureDuration, and use bracketed bursts.)")
+        add("")
+
+        add("== Permissions ==")
+        add("Photos (add): \(PhotoLibrary.name(of: PhotoLibrary.addStatus))")
+        add("Camera: \(AVCaptureDevice.authorizationStatus(for: .video) == .authorized ? "allowed" : "not allowed")")
+        add("")
+
         add("== Photo output ==")
         add("Max quality mode: \(photoOutput.maxPhotoQualityPrioritization.rawValue) (3 = quality)")
         add("Max bracketed photos (for our own night/HDR merge): \(photoOutput.maxBracketedCapturePhotoCount)")

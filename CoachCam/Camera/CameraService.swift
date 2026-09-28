@@ -103,14 +103,39 @@ final class CameraService: NSObject, ObservableObject {
                 // the camera's real format is active (setting it too early can crash).
                 if let device = self.videoInput?.device { self.applyPhotoDimensions(for: device) }
             }
-            if !self.session.isRunning { self.session.startRunning() }
-            let running = self.session.isRunning
-            DispatchQueue.main.async {
-                self.isRunning = running
-                self.setUpRotation()
-            }
-            Log.info("Camera session running: \(running)")
+            self.ensureRunning(attempt: 1)
         }
+    }
+
+    /// Starts the session and retries if it doesn't come up.
+    ///
+    /// When you leave the app, iOS "interrupts" the camera (reason 1) and normally resumes
+    /// it by itself when you come back. But if we ask it to start a moment before iOS has
+    /// given the camera back, startRunning() quietly does nothing. So: retry a few times, and
+    /// also try again when iOS says the interruption ended. Runs on sessionQueue.
+    private func ensureRunning(attempt: Int) {
+        guard isConfigured else { return }
+        if !session.isRunning { session.startRunning() }
+        let running = session.isRunning
+        DispatchQueue.main.async {
+            let changed = self.isRunning != running
+            self.isRunning = running
+            if running && changed { self.setUpRotation() }
+        }
+        if running {
+            if attempt > 1 { Log.info("Camera running (after \(attempt) tries)") }
+            return
+        }
+        if session.isInterrupted && attempt >= 3 {
+            // iOS still holds the camera; interruptionEnded will call us again.
+            Log.info("Waiting for iOS to hand the camera back")
+            return
+        }
+        guard attempt < 5 else {
+            Log.error("Camera didn't restart after \(attempt) tries")
+            return
+        }
+        sessionQueue.asyncAfter(deadline: .now() + 0.4) { self.ensureRunning(attempt: attempt + 1) }
     }
 
     /// Called by the preview view once its layer exists.
@@ -161,6 +186,8 @@ final class CameraService: NSObject, ObservableObject {
                                                name: AVCaptureSession.runtimeErrorNotification, object: session)
         NotificationCenter.default.addObserver(self, selector: #selector(sessionInterrupted(_:)),
                                                name: AVCaptureSession.wasInterruptedNotification, object: session)
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionInterruptionEnded(_:)),
+                                               name: AVCaptureSession.interruptionEndedNotification, object: session)
         isConfigured = true
         Log.info("Camera configured with \(device.localizedName)")
     }
@@ -439,6 +466,8 @@ final class CameraService: NSObject, ObservableObject {
         case .success(let data):
             let thumbnail = PhotoLibrary.thumbnail(from: data, maxPixelSize: 180)
             DispatchQueue.main.async { self.lastThumbnail = thumbnail }
+            // Permission was already asked for on the main thread when you pressed the
+            // shutter (see CameraScreen.takePhoto), so saving never shows a prompt itself.
             Task {
                 do {
                     try await PhotoLibrary.save(data)
@@ -446,7 +475,7 @@ final class CameraService: NSObject, ObservableObject {
                     await MainActor.run { self.lastSaveMessage = nil }
                 } catch {
                     Log.error("Save failed: \(error.localizedDescription)")
-                    await MainActor.run { self.lastSaveMessage = "Couldn't save — check Photos permission" }
+                    await MainActor.run { self.lastSaveMessage = "Couldn't save the photo" }
                 }
             }
         }
@@ -468,13 +497,28 @@ final class CameraService: NSObject, ObservableObject {
         let error = note.userInfo?[AVCaptureSessionErrorKey] as? AVError
         Log.error("Session runtime error: \(error?.localizedDescription ?? "unknown")")
         if error?.code == .mediaServicesWereReset {
-            sessionQueue.async { if !self.session.isRunning { self.session.startRunning() } }
+            sessionQueue.async { self.ensureRunning(attempt: 1) }
         }
     }
 
     @objc private func sessionInterrupted(_ note: Notification) {
-        let reason = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int).map(String.init) ?? "?"
-        Log.warn("Session interrupted (reason \(reason))")
+        let raw = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int ?? -1
+        let reason: String
+        switch AVCaptureSession.InterruptionReason(rawValue: raw) {
+        case .videoDeviceNotAvailableInBackground: reason = "app went to background"
+        case .audioDeviceInUseByAnotherClient: reason = "audio in use by another app"
+        case .videoDeviceInUseByAnotherClient: reason = "camera in use by another app"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps: reason = "multiple apps on screen"
+        case .videoDeviceNotAvailableDueToSystemPressure: reason = "phone too hot / system pressure"
+        default: reason = "reason \(raw)"
+        }
+        Log.info("Camera paused: \(reason)")
+        DispatchQueue.main.async { self.isRunning = false }
+    }
+
+    @objc private func sessionInterruptionEnded(_ note: Notification) {
+        Log.info("Camera pause ended")
+        sessionQueue.async { self.ensureRunning(attempt: 1) }
     }
 }
 
@@ -506,7 +550,8 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 brightness: lastBrightness,
                 iso: device?.iso ?? 0,
                 shutter: device.map { CMTimeGetSeconds($0.exposureDuration) } ?? 0,
-                aperture: device?.lensAperture ?? 0
+                // The lens actually in use (the virtual camera only reports its first lens).
+                aperture: (device?.activePrimaryConstituent ?? device)?.lensAperture ?? 0
             )
         }
     }
