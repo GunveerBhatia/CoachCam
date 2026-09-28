@@ -1,0 +1,50 @@
+{
+  "_readme": "Every tunable number lives here. Coordinates are fractions of the frame (0-1). Change a value, push, reinstall; no Swift changes needed.",
+
+  "analysis": {
+    "_readme": "How often the live feed is analyzed. Fast = people, faces, objects. Slow = scene labels, horizon, saliency, face landmarks.",
+    "fastHz": 12,
+    "slowEveryNthTick": 4,
+    "objectConfidence": 0.35,
+    "bodyJointConfidence": 0.3,
+    "classificationMinConfidence": 0.1
+  },
+
+  "modes": {
+    "_readme": "A new mode must win this many analysis ticks in a row before the badge switches (12 ticks = 1 s). Keeps the mode from flickering.",
+    "switchTicks": 3,
+    "firstModeTicks": 2,
+
+    "headshotMinFaceArea": 0.035,
+    "fullBodyNeedsAnkles": true,
+    "fullBodyMinHeight": 0.45,
+
+    "mirrorPhoneMaxDistanceFromFace": 0.35,
+    "mirrorPhoneMinOverlapWithPerson": 0.6,
+
+    "foodMinPitchDegrees": 20,
+    "foodMinLabelConfidence": 0.25,
+    "foodObjectLabels": ["pizza", "cake", "sandwich", "donut", "hot dog", "broccoli", "carrot", "banana", "apple", "orange", "bowl", "cup", "wine glass", "fork", "knife", "spoon", "dining table"],
+    "foodSceneLabels": ["food", "dessert", "meal", "dish", "baked_goods", "fruit", "vegetable", "drink", "beverage", "coffee", "cake", "pizza", "salad", "sandwich", "burger", "sushi", "breakfast"],
+
+    "buildingMinLabelConfidence": 0.3,
+    "buildingSceneLabels": ["building", "architecture", "skyscraper", "structure", "tower", "church", "cathedral", "castle", "bridge", "house", "cityscape", "monument", "temple", "facade"],
+
+    "skyMinLabelConfidence": 0.3,
+    "skySceneLabels": ["sky", "sunset_sunrise", "sunset", "sunrise", "cloudy", "clouds", "landscape", "mountain", "beach", "ocean", "sea", "lake", "horizon", "field", "outdoor"],
+
+    "objectMinArea": 0.04,
+    "objectMaxCenterDistance": 0.3
+  },
+
+  "subject": {
+    "_readme": "Tap-to-select: the tapped person/object is followed by overlap between frames; released if it's gone this long.",
+    "minOverlapToFollow": 0.3,
+    "releaseAfterSeconds": 1.5
+  },
+
+  "light": {
+    "clippedHighlightLuma": 0.97,
+    "clippedShadowLuma": 0.03
+  }
+}

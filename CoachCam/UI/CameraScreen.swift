@@ -4,13 +4,17 @@ import SwiftUI
 /// The main camera screen.
 ///
 /// Layout (top to bottom):
-///   top bar (settings) → 3:4 viewfinder with guides → lens buttons → thumbnail · shutter · flip
-/// The coaching pill, mode badge and Ideas button join in later milestones.
+///   top bar (mode badge, settings) → 3:4 viewfinder with guides → lens buttons →
+///   thumbnail · shutter · flip. The coaching pill and Ideas button join in later milestones.
+///
+/// Data flow: camera frames → SceneAnalyzer (12×/s) → ModeEngine → mode badge.
 struct CameraScreen: View {
     @StateObject private var camera = CameraService()
-    // @State (not @StateObject) so this screen doesn't redraw 20×/second with the gyro;
-    // only the views that show motion data observe it.
+    @StateObject private var modeEngine = ModeEngine()
+    // @State (not @StateObject) so this screen doesn't redraw 12–20×/second with the gyro
+    // or every analysis; only the small views that show that data observe them.
     @State private var motion = MotionService()
+    @State private var analyzer = SceneAnalyzer()
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
     @AppStorage(SettingsKey.showGrid) private var showGrid = true
@@ -46,6 +50,7 @@ struct CameraScreen: View {
             if event.phase == .ended { takePhoto() }
         }
         .onAppear {
+            connectAnalysis()
             camera.start()
             motion.start()
             refreshPhotosBlocked()
@@ -69,8 +74,22 @@ struct CameraScreen: View {
 
     // MARK: - Pieces
 
+    /// Frames go to the analyzer; each analysis goes to the mode engine.
+    private func connectAnalysis() {
+        let analyzer = self.analyzer
+        let engine = self.modeEngine
+        let motion = self.motion
+        camera.frameHandler = { sampleBuffer, angle, isFront in
+            analyzer.submit(sampleBuffer, rotationAngle: angle, isFrontCamera: isFront)
+        }
+        analyzer.onAnalysis = { analysis in
+            engine.ingest(analysis, cameraPitch: motion.cameraPitch)
+        }
+    }
+
     private var topBar: some View {
         HStack {
+            ModeBadge(engine: modeEngine)
             Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill")
@@ -89,6 +108,8 @@ struct CameraScreen: View {
                 CameraPreview(camera: camera)
                 if showGrid { GridOverlay() }
                 if showLevel { LevelOverlay(motion: motion) }
+                if showDebugOverlay { DetectionOverlay(analyzer: analyzer, camera: camera) }
+                SubjectBrackets(tracker: modeEngine.subjects, camera: camera)
                 if let point = focusPoint {
                     FocusIndicator(point: point).id(point.x + point.y * 10_000)
                 }
@@ -98,7 +119,8 @@ struct CameraScreen: View {
                 if showDebugOverlay {
                     VStack {
                         HStack {
-                            DebugOverlay(camera: camera, stats: camera.stats, motion: motion)
+                            DebugOverlay(camera: camera, stats: camera.stats, motion: motion, analyzer: analyzer,
+                                         engine: modeEngine, diagnostics: modeEngine.diagnostics)
                             Spacer()
                         }
                         Spacer()
@@ -123,9 +145,15 @@ struct CameraScreen: View {
                 }
             }
             .contentShape(Rectangle())
+            // Tap: focus there, and lock onto the person/object under your finger
+            // (tap empty space to go back to automatic).
             .onTapGesture(coordinateSpace: .local) { location in
                 focusPoint = location
                 camera.focus(atLayerPoint: location)
+                if let point = camera.uprightPoint(fromLayerPoint: location) {
+                    let picked = modeEngine.subjects.select(at: point, in: analyzer.latest)
+                    Log.info("Tap → \(picked)")
+                }
             }
             .gesture(pinchToZoom)
             .frame(width: geo.size.width, height: geo.size.height)

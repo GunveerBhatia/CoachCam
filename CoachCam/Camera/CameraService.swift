@@ -44,7 +44,8 @@ final class CameraService: NSObject, ObservableObject {
 
     /// Hook for frame analysis (M2). Called on `videoQueue` for every camera frame;
     /// the analyzer decides for itself how often to do real work.
-    var frameHandler: ((CMSampleBuffer) -> Void)?
+    /// Arguments: the frame, the rotation needed to make it upright (0/90/180/270), front camera?
+    var frameHandler: ((CMSampleBuffer, CGFloat, Bool) -> Void)?
 
     // MARK: AVFoundation objects
 
@@ -59,6 +60,9 @@ final class CameraService: NSObject, ObservableObject {
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var previewRotationObservation: NSKeyValueObservation?
+    private var captureRotationObservation: NSKeyValueObservation?
+    /// How the phone is held and which camera is active; read by the analysis on other threads.
+    private let frameContext = FrameContext()
     private var lensObservation: NSKeyValueObservation?
     private var inFlightCaptures: [Int64: PhotoCaptureProcessor] = [:]   // Only touched on sessionQueue.
 
@@ -175,6 +179,8 @@ final class CameraService: NSObject, ObservableObject {
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
         ]
         videoOutput.alwaysDiscardsLateVideoFrames = true
+        // Small (screen-sized) frames: plenty for detection and far cheaper than 12 MP ones.
+        videoOutput.deliversPreviewSizedOutputBuffers = true
         videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
@@ -313,6 +319,35 @@ final class CameraService: NSObject, ObservableObject {
                 }
             }
         }
+        // Remember how the phone is held, for analysis (read from the video queue).
+        captureRotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture,
+                                                         options: [.initial, .new]) { [weak self] c, _ in
+            self?.frameContext.set(angle: c.videoRotationAngleForHorizonLevelCapture)
+        }
+        frameContext.set(isFront: device.position == .front)
+    }
+
+    // MARK: - Coordinate conversion (main thread)
+
+    /// Screen point in the preview → upright photo coordinates (0–1, top-left origin).
+    func uprightPoint(fromLayerPoint point: CGPoint) -> CGPoint? {
+        guard let layer = previewLayer else { return nil }
+        let sensor = layer.captureDevicePointConverted(fromLayerPoint: point)
+        return FrameGeometry(rotationAngle: frameContext.snapshot().angle).upright(fromSensor: sensor)
+    }
+
+    /// Upright photo coordinates → screen point in the preview.
+    func layerPoint(fromUpright point: CGPoint) -> CGPoint? {
+        guard let layer = previewLayer else { return nil }
+        let sensor = FrameGeometry(rotationAngle: frameContext.snapshot().angle).sensor(fromUpright: point)
+        return layer.layerPointConverted(fromCaptureDevicePoint: sensor)
+    }
+
+    /// Upright rect → screen rect in the preview.
+    func layerRect(fromUpright rect: CGRect) -> CGRect? {
+        guard let a = layerPoint(fromUpright: CGPoint(x: rect.minX, y: rect.minY)),
+              let b = layerPoint(fromUpright: CGPoint(x: rect.maxX, y: rect.maxY)) else { return nil }
+        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
 
     // MARK: - Lens and zoom
@@ -534,7 +569,8 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         if frameCount % 3 == 0, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
             lastBrightness = FrameMath.meanLuma(pixelBuffer)
         }
-        frameHandler?(sampleBuffer)
+        let context = frameContext.snapshot()
+        frameHandler?(sampleBuffer, context.angle, context.isFront)
 
         let workMs = (CACurrentMediaTime() - start) * 1000
         let now = CACurrentMediaTime()
@@ -605,5 +641,26 @@ enum FrameMath {
             y += step
         }
         return count > 0 ? Double(total) / Double(count) / 255.0 : 0
+    }
+}
+
+/// Thread-safe holder for "how is the phone held" and "which camera", written on the main
+/// thread and read on the video queue for every frame.
+final class FrameContext {
+    private let lock = NSLock()
+    private var angle: CGFloat = 90   // Portrait until the rotation coordinator reports.
+    private var isFront = false
+
+    func set(angle: CGFloat) {
+        lock.lock(); self.angle = angle; lock.unlock()
+    }
+
+    func set(isFront: Bool) {
+        lock.lock(); self.isFront = isFront; lock.unlock()
+    }
+
+    func snapshot() -> (angle: CGFloat, isFront: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        return (angle, isFront)
     }
 }
