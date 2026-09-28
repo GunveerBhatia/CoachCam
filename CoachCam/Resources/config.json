@@ -11,31 +11,53 @@
     "classificationMinConfidence": 0.1
   },
 
-  "modes": {
-    "_readme": "A new mode must win this many analysis ticks in a row before the badge switches (12 ticks = 1 s). Keeps the mode from flickering.",
-    "switchTicks": 3,
-    "firstModeTicks": 2,
+  "detection": {
+    "_readme": "Detection only DESCRIBES the frame; it never picks the photo type. A new subject category must be proposed this many ticks in a row (12 ticks = 1 s) before it replaces the current one. categoryMinConfidence = minimum detector confidence for an object (food or other) to decide the category; scene labels use their own thresholds below.",
+    "categoryStableTicks": 5,
+    "categoryMinConfidence": 0.5,
 
-    "headshotMinFaceArea": 0.035,
+    "_people": "A person counts as the subject if their box covers this much of the frame, or a face is found.",
+    "peopleMinFill": 0.03,
+
+    "_framing": "Close-up (headshot framing) needs a big face AND shoulders near the bottom edge (or below it). Otherwise half body / full body.",
+    "closeUpMinFaceArea": 0.06,
+    "closeUpShouldersMinY": 0.8,
     "fullBodyNeedsAnkles": true,
-    "fullBodyMinHeight": 0.45,
 
+    "_mirror": "Mirror cue: a phone on the person's body, near their head.",
     "mirrorPhoneMaxDistanceFromFace": 0.35,
     "mirrorPhoneMinOverlapWithPerson": 0.6,
 
-    "foodMinPitchDegrees": 20,
     "foodMinLabelConfidence": 0.25,
-    "foodObjectLabels": ["pizza", "cake", "sandwich", "donut", "hot dog", "broccoli", "carrot", "banana", "apple", "orange", "bowl", "cup", "wine glass", "fork", "knife", "spoon", "dining table"],
+    "foodMinObjectArea": 0.03,
+    "foodObjectLabels": ["pizza", "cake", "sandwich", "donut", "hot dog", "broccoli", "carrot", "banana", "apple", "orange", "bowl"],
     "foodSceneLabels": ["food", "dessert", "meal", "dish", "baked_goods", "fruit", "vegetable", "drink", "beverage", "coffee", "cake", "pizza", "salad", "sandwich", "burger", "sushi", "breakfast"],
 
+    "_building": "Sanity checks: a building needs the scene label AND distance (focus far, not macro, no big close object) AND strong vertical lines. Outdoor labels add confidence. lensPosition is 0 (closest focus) to 1 (farthest); calibrate buildingMinLensPosition from the debug overlay's 'Distance' row.",
     "buildingMinLabelConfidence": 0.3,
+    "buildingMinLensPosition": 0.7,
+    "buildingMaxCloseObjectArea": 0.2,
+    "buildingMinVerticalLines": 0.015,
     "buildingSceneLabels": ["building", "architecture", "skyscraper", "structure", "tower", "church", "cathedral", "castle", "bridge", "house", "cityscape", "monument", "temple", "facade"],
+    "outdoorSceneLabels": ["outdoor", "sky", "cloudy", "street", "cityscape", "city", "road", "tree", "grass", "plant", "field"],
 
+    "_sky": "Sky/landscape also needs distance (focus far).",
     "skyMinLabelConfidence": 0.3,
-    "skySceneLabels": ["sky", "sunset_sunrise", "sunset", "sunrise", "cloudy", "clouds", "landscape", "mountain", "beach", "ocean", "sea", "lake", "horizon", "field", "outdoor"],
+    "skyMinLensPosition": 0.6,
+    "skySceneLabels": ["sky", "sunset_sunrise", "sunset", "sunrise", "cloudy", "clouds", "landscape", "mountain", "beach", "ocean", "sea", "lake", "horizon"],
 
     "objectMinArea": 0.04,
-    "objectMaxCenterDistance": 0.3
+    "objectMaxCenterDistance": 0.3,
+
+    "_distance": "Rough distance for people from face size: an adult face is about this wide.",
+    "faceWidthMeters": 0.16,
+
+    "_lighting": "Descriptors shown in the debug overlay and used by coaching.",
+    "darkBelow": 0.18,
+    "brightAbove": 0.7,
+    "harshClippedHighlights": 0.08,
+    "backlitFaceRatio": 0.6,
+    "sideLightDifference": 0.12
   },
 
   "subject": {

@@ -45,7 +45,7 @@ final class CameraService: NSObject, ObservableObject {
     /// Hook for frame analysis (M2). Called on `videoQueue` for every camera frame;
     /// the analyzer decides for itself how often to do real work.
     /// Arguments: the frame, the rotation needed to make it upright (0/90/180/270), front camera?
-    var frameHandler: ((CMSampleBuffer, CGFloat, Bool) -> Void)?
+    var frameHandler: ((CMSampleBuffer, FrameInfo) -> Void)?
 
     // MARK: AVFoundation objects
 
@@ -595,8 +595,24 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         if frameCount % 3 == 0, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
             lastBrightness = FrameMath.meanLuma(pixelBuffer)
         }
-        let context = frameContext.snapshot()
-        frameHandler?(sampleBuffer, context.angle, context.isFront)
+        if let frameHandler {
+            let context = frameContext.snapshot()
+            var info = FrameInfo(rotationAngle: context.angle, isFrontCamera: context.isFront)
+            if let device = videoInput?.device {
+                // The physical lens in use (the virtual camera reports its first lens otherwise).
+                let lens = device.activePrimaryConstituent ?? device
+                info.lensPosition = Double(lens.lensPosition)
+                info.activeLens = lens.deviceType
+                // Field of view along the sensor's long side at the current zoom.
+                let baseFOV = Double(device.activeFormat.videoFieldOfView) * .pi / 180
+                info.horizontalFOV = 2 * atan(tan(baseFOV / 2) / Double(device.videoZoomFactor))
+                let displayZoom = Double(device.videoZoomFactor * Self.zoomMultiplier(device))
+                // iOS switches to the ultra wide for macro when you're very close at 1x+.
+                info.isMacro = device.isVirtualDevice && lens.deviceType == .builtInUltraWideCamera
+                    && displayZoom >= 0.95
+            }
+            frameHandler(sampleBuffer, info)
+        }
 
         let workMs = (CACurrentMediaTime() - start) * 1000
         let now = CACurrentMediaTime()
@@ -689,4 +705,18 @@ final class FrameContext {
         lock.lock(); defer { lock.unlock() }
         return (angle, isFront)
     }
+}
+/// Camera facts that travel with each frame to the analyzer.
+struct FrameInfo {
+    /// Rotation that makes the frame upright (0/90/180/270).
+    var rotationAngle: CGFloat
+    var isFrontCamera: Bool
+    /// Focus position of the lens in use: 0 = closest focus, 1 = farthest (not calibrated in metres).
+    var lensPosition: Double?
+    /// The physical lens in use.
+    var activeLens: AVCaptureDevice.DeviceType?
+    /// Horizontal field of view (along the sensor's long side) in radians, at the current zoom.
+    var horizontalFOV: Double?
+    /// True when iOS has switched to the ultra wide for a close-up (macro).
+    var isMacro = false
 }

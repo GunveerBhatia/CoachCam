@@ -12,7 +12,12 @@ final class LightMeter {
     struct Result {
         var light: LightInfo
         var frameChange: Double
+        var verticalLines: Double = 0
     }
+
+    // Edge grid for the vertical-lines measure.
+    private let edgeWidth = 96
+    private let edgeHeight = 72
 
     /// `faceBox` is in upright coordinates; `geometry` converts it to the sensor buffer.
     func measure(_ pixelBuffer: CVPixelBuffer, faceBox: CGRect?, geometry: FrameGeometry,
@@ -94,7 +99,34 @@ final class LightMeter {
         }
         previousGrid = grid
 
-        return Result(light: light, frameChange: change)
+        // 4. Vertical lines: sample a 96×72 grid and count strong edges that run up-down in
+        //    the upright picture. With the phone upright (90°/270°) the sensor is sideways,
+        //    so "up-down in the picture" is "left-right on the sensor".
+        var edges = [Int](repeating: 0, count: edgeWidth * edgeHeight)
+        for ey in 0..<edgeHeight {
+            let y = (ey * height) / edgeHeight
+            for ex in 0..<edgeWidth {
+                let x = (ex * width) / edgeWidth
+                edges[ey * edgeWidth + ex] = Int(yPlane[y * yRowBytes + x])
+            }
+        }
+        let sensorIsSideways = geometry.angle == 90 || geometry.angle == 270
+        var verticalCount = 0
+        let strongEdge = 40   // Brightness step (0–255) that counts as a real edge.
+        for ey in 1..<(edgeHeight - 1) {
+            for ex in 1..<(edgeWidth - 1) {
+                let i = ey * edgeWidth + ex
+                let gx = abs(edges[i + 1] - edges[i - 1])                   // change left↔right on sensor
+                let gy = abs(edges[i + edgeWidth] - edges[i - edgeWidth])   // change up↔down on sensor
+                // An up-down line in the picture = brightness changing across it, sideways.
+                let across = sensorIsSideways ? gy : gx
+                let along = sensorIsSideways ? gx : gy
+                if across >= strongEdge && across > 2 * along { verticalCount += 1 }
+            }
+        }
+        let verticalLines = Double(verticalCount) / Double((edgeWidth - 2) * (edgeHeight - 2))
+
+        return Result(light: light, frameChange: change, verticalLines: verticalLines)
     }
 
     /// Forget the previous frame (after switching cameras, so it doesn't count as motion).

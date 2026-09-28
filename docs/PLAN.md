@@ -13,7 +13,9 @@ CoachCam/
    ├─ Analysis/     FrameAnalyzer (throttled to 12 fps) + detectors:
    │                People (body pose, face), Objects (YOLO), Scene (classify, horizon,
    │                saliency), Light, Motion (CoreMotion + frame differences)
-   ├─ Modes/        ModeClassifier (mirror, selfie, headshot, …) with hysteresis
+   ├─ Detection/    SceneDescriber (subject category, framing, distance, light; describes only),
+   │                SubjectTracker (tap to select)
+   ├─ Shot/         PhotoType + PhotoTypeStore (your choice per category), Playbook + RulePlanner
    ├─ AutoSettings/ Lens, exposure, HDR, low-light, and white-balance policies + override badges
    ├─ Coaching/     RuleEngine (reads playbook.json), Smoother, CoachingPill
    ├─ Poses/        PoseLibrary (poses.json), VibePicker, step checker

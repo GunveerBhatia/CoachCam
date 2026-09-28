@@ -59,6 +59,13 @@ struct LightInfo {
 struct SceneAnalysis {
     var timestamp: TimeInterval = 0
     var isFrontCamera = false
+    /// Camera facts at the time of the frame (see FrameInfo).
+    var lensPosition: Double?
+    var horizontalFOV: Double?
+    var isMacro = false
+    var rotationAngle = 90
+    /// Share of the frame covered by strong upright-vertical edges (buildings score high).
+    var verticalLines: Double = 0
     var people: [PersonInfo] = []
     var objects: [DetectedObject] = []
     /// Scene labels from Vision's classifier, best first (e.g. "sky" 0.82). Updated on slow ticks.

@@ -12,24 +12,36 @@ struct AppConfig: Decodable {
         var classificationMinConfidence: Float
     }
 
-    struct Modes: Decodable {
-        var switchTicks: Int
-        var firstModeTicks: Int
-        var headshotMinFaceArea: Double
+    struct Detection: Decodable {
+        var categoryStableTicks: Int
+        var categoryMinConfidence: Double
+        var peopleMinFill: Double
+        var closeUpMinFaceArea: Double
+        var closeUpShouldersMinY: Double
         var fullBodyNeedsAnkles: Bool
-        var fullBodyMinHeight: Double
         var mirrorPhoneMaxDistanceFromFace: Double
         var mirrorPhoneMinOverlapWithPerson: Double
-        var foodMinPitchDegrees: Double
         var foodMinLabelConfidence: Float
+        var foodMinObjectArea: Double
         var foodObjectLabels: [String]
         var foodSceneLabels: [String]
         var buildingMinLabelConfidence: Float
+        var buildingMinLensPosition: Double
+        var buildingMaxCloseObjectArea: Double
+        var buildingMinVerticalLines: Double
         var buildingSceneLabels: [String]
+        var outdoorSceneLabels: [String]
         var skyMinLabelConfidence: Float
+        var skyMinLensPosition: Double
         var skySceneLabels: [String]
         var objectMinArea: Double
         var objectMaxCenterDistance: Double
+        var faceWidthMeters: Double
+        var darkBelow: Double
+        var brightAbove: Double
+        var harshClippedHighlights: Double
+        var backlitFaceRatio: Double
+        var sideLightDifference: Double
     }
 
     struct Subject: Decodable {
@@ -43,7 +55,7 @@ struct AppConfig: Decodable {
     }
 
     var analysis: Analysis
-    var modes: Modes
+    var detection: Detection
     var subject: Subject
     var light: Light
 
@@ -51,7 +63,7 @@ struct AppConfig: Decodable {
     /// debug log and the app stops with a clear message, rather than silently using wrong numbers.
     static let shared: AppConfig = {
         guard let url = Bundle.main.url(forResource: "config", withExtension: "json") else {
-            Log.error("config.json is missing from the app bundle")
+            LogStore.shared.writeNow("config.json is missing from the app bundle")
             fatalError("config.json is missing")
         }
         do {

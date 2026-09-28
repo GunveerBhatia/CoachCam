@@ -4,17 +4,20 @@ import SwiftUI
 /// The main camera screen.
 ///
 /// Layout (top to bottom):
-///   top bar (mode badge, settings) → 3:4 viewfinder with guides → lens buttons →
-///   thumbnail · shutter · flip. The coaching pill and Ideas button join in later milestones.
+///   top bar (subject · photo type picker, settings) → 3:4 viewfinder with guides →
+///   lens buttons → thumbnail · shutter · flip. Coaching pill and Ideas button come later.
 ///
-/// Data flow: camera frames → SceneAnalyzer (12×/s) → ModeEngine → mode badge.
+/// Data flow: camera frames → SceneAnalyzer (12×/s) → SceneDescriber (what's in the frame)
+/// → RulePlanner (detection + your photo type → playbook rule).
 struct CameraScreen: View {
     @StateObject private var camera = CameraService()
-    @StateObject private var modeEngine = ModeEngine()
+    @StateObject private var describer = SceneDescriber()
+    @StateObject private var photoTypes = PhotoTypeStore()
     // @State (not @StateObject) so this screen doesn't redraw 12–20×/second with the gyro
     // or every analysis; only the small views that show that data observe them.
     @State private var motion = MotionService()
     @State private var analyzer = SceneAnalyzer()
+    @State private var planner = RulePlanner()
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
     @AppStorage(SettingsKey.showGrid) private var showGrid = true
@@ -74,22 +77,29 @@ struct CameraScreen: View {
 
     // MARK: - Pieces
 
-    /// Frames go to the analyzer; each analysis goes to the mode engine.
+    /// Frames go to the analyzer; each analysis is described, then matched to a playbook rule
+    /// using the photo type you picked.
     private func connectAnalysis() {
         let analyzer = self.analyzer
-        let engine = self.modeEngine
+        let describer = self.describer
+        let photoTypes = self.photoTypes
+        let planner = self.planner
         let motion = self.motion
-        camera.frameHandler = { sampleBuffer, angle, isFront in
-            analyzer.submit(sampleBuffer, rotationAngle: angle, isFrontCamera: isFront)
+        camera.frameHandler = { sampleBuffer, info in
+            analyzer.submit(sampleBuffer, info: info)
         }
         analyzer.onAnalysis = { analysis in
-            engine.ingest(analysis, cameraPitch: motion.cameraPitch)
+            let description = describer.ingest(analysis, cameraPitch: motion.cameraPitch,
+                                               levelError: motion.levelError)
+            let category = photoTypes.effectiveCategory(detected: description.category)
+            planner.update(category: category, photoType: photoTypes.choice(for: category),
+                           description: description)
         }
     }
 
     private var topBar: some View {
         HStack {
-            ModeBadge(engine: modeEngine)
+            ShotPicker(describer: describer, store: photoTypes)
             Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill")
@@ -109,7 +119,7 @@ struct CameraScreen: View {
                 if showGrid { GridOverlay() }
                 if showLevel { LevelOverlay(motion: motion) }
                 if showDebugOverlay { DetectionOverlay(analyzer: analyzer, camera: camera) }
-                SubjectBrackets(tracker: modeEngine.subjects, camera: camera)
+                SubjectBrackets(tracker: describer.subjects, camera: camera)
                 if let point = focusPoint {
                     FocusIndicator(point: point).id(point.x + point.y * 10_000)
                 }
@@ -120,7 +130,7 @@ struct CameraScreen: View {
                     VStack {
                         HStack {
                             DebugOverlay(camera: camera, stats: camera.stats, motion: motion, analyzer: analyzer,
-                                         engine: modeEngine, diagnostics: modeEngine.diagnostics)
+                                         live: describer.live, planner: planner)
                             Spacer()
                         }
                         Spacer()
@@ -151,7 +161,7 @@ struct CameraScreen: View {
                 focusPoint = location
                 camera.focus(atLayerPoint: location)
                 if let point = camera.uprightPoint(fromLayerPoint: location) {
-                    let picked = modeEngine.subjects.select(at: point, in: analyzer.latest)
+                    let picked = describer.subjects.select(at: point, in: analyzer.latest)
                     Log.info("Tap → \(picked)")
                 }
             }

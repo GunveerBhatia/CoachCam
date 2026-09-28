@@ -1,0 +1,330 @@
+{
+  "_readme": "Coaching rules = detection + photo type. Built from docs/SPEC.md. Each rule: category (people/building/food/sky/object/general), optional photoType, optional match {people: 1|2|3|4+, camera: front|back, props: [...], personTypes: [...]}. The app picks the exact match or the closest one and shows which in the debug overlay. Keep tips under ~8 words. pitch: + = phone pointing down, - = pointing up.",
+  "version": 1,
+
+  "rules": [
+    {
+      "id": "people.headshot",
+      "category": "people", "photoType": "headshot",
+      "match": { "people": "1", "camera": "back" },
+      "lens": { "zoom": 4, "fallbackZoom": 2, "note": "About 85–100mm flatters faces. Too close for 4x: use 2x and step back." },
+      "camera": { "height": "Eye level or slightly above", "angle": "Level", "pitchMin": -5, "pitchMax": 10 },
+      "framing": { "placement": "Eyes on the upper third", "headroom": "Small gap above the head", "crop": "Mid-chest; never at a joint" },
+      "lighting": ["Face toward soft light", "Avoid overhead midday sun"],
+      "pose": ["Angle your body 30–45° away", "Turn your head back to the lens", "Chin forward and slightly down", "Drop your shoulders", "Lean slightly toward the lens", "Tilt head 5° at most", "Eyes on the lens, not the screen"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "lowLight": "quality", "shutter": "normal", "whiteBalance": "skin", "depth": true },
+      "source": "SPEC: Headshot / pro; Lens choice"
+    },
+    {
+      "id": "people.headshot.front",
+      "category": "people", "photoType": "headshot",
+      "match": { "people": "1", "camera": "front" },
+      "lens": { "zoom": 1, "note": "Front camera. Hold the phone at arm's length to avoid face distortion." },
+      "camera": { "height": "Slightly above eye level", "angle": "Tilted slightly down", "pitchMin": -20, "pitchMax": 0 },
+      "framing": { "placement": "Eyes on the upper third", "headroom": "Small gap above the head", "notes": ["Warn if the phone is too close (distortion)"] },
+      "lighting": ["Turn toward the light"],
+      "pose": ["Chin forward and slightly down", "Turn your face toward the light", "Relax your shoulders", "Eyes on the lens"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Front selfie"
+    },
+    {
+      "id": "people.pro",
+      "category": "people", "photoType": "pro",
+      "match": { "people": "1" },
+      "lens": { "zoom": 4, "fallbackZoom": 2, "note": "Step back rather than going wider." },
+      "camera": { "height": "Eye level or slightly above", "angle": "Level", "pitchMin": -5, "pitchMax": 10 },
+      "framing": { "placement": "Centred or on a third; plain background", "headroom": "Small", "crop": "Mid-chest or waist; never at a joint" },
+      "lighting": ["Soft, even light on the face", "Plain wall or office background"],
+      "pose": ["Angle your body 30–45° away", "Turn your head back to the lens", "Chin forward and slightly down", "Shoulders down and relaxed", "Small lean toward the lens", "Eyes on the lens"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin", "depth": true },
+      "source": "SPEC: Headshot / pro"
+    },
+    {
+      "id": "people.portrait",
+      "category": "people", "photoType": "portrait",
+      "match": { "people": "1" },
+      "lens": { "zoom": 2, "fallbackZoom": 1, "note": "Half-body portrait at 48mm." },
+      "camera": { "height": "Chest to eye level", "angle": "Level", "pitchMin": -5, "pitchMax": 10 },
+      "framing": { "placement": "Subject on the nearest third", "headroom": "Small", "crop": "Waist or mid-thigh; never at knees or elbows" },
+      "lighting": ["Soft light from the side or front"],
+      "pose": ["Angle your body slightly away", "Weight on your back leg", "Turn your face to the lens", "Relax your hands"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin", "depth": true },
+      "source": "SPEC: General; Headshot / pro"
+    },
+    {
+      "id": "people.casual",
+      "category": "people", "photoType": "casual",
+      "match": { "people": "1" },
+      "lens": { "zoom": 1, "fallbackZoom": 2, "note": "1x or 2x depending on distance." },
+      "camera": { "height": "Chest height", "angle": "Level", "pitchMin": -5, "pitchMax": 10 },
+      "framing": { "placement": "Subject on the nearest third", "headroom": "Some space above the head", "crop": "Never at a joint" },
+      "lighting": ["Open shade is best", "Avoid harsh overhead sun"],
+      "pose": ["Relax, weight on one leg", "Hands in pockets or holding something", "Look off to the side, then to the lens", "Small natural smile"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: General; Poses (Casual vibe)"
+    },
+    {
+      "id": "people.street",
+      "category": "people", "photoType": "street",
+      "match": { "people": "1" },
+      "lens": { "zoom": 1, "fallbackZoom": 2 },
+      "camera": { "height": "Waist to chest height", "angle": "Level (keep verticals straight)", "pitchMin": -8, "pitchMax": 5 },
+      "framing": { "placement": "Subject on a third; street lines leading in", "headroom": "Some space above the head", "crop": "Head to toe or mid-thigh; never at knees" },
+      "lighting": ["Side light shows texture", "Watch for harsh shadows on the face"],
+      "pose": ["Walk slowly toward the camera", "Look away from the lens", "One hand in a pocket", "Keep your shoulders loose"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "shutter": "fast", "whiteBalance": "auto" },
+      "source": "SPEC: General; Poses (Street vibe)"
+    },
+    {
+      "id": "people.fullBody",
+      "category": "people", "photoType": "fullBody",
+      "match": { "people": "1" },
+      "lens": { "zoom": 1, "fallbackZoom": 2, "note": "1x or 2x depending on distance; step back rather than 0.5x." },
+      "camera": { "height": "Waist to chest height", "angle": "Level so legs aren't shortened", "pitchMin": -5, "pitchMax": 5 },
+      "framing": { "placement": "Subject on a third or centred", "headroom": "Space above the head and below the feet", "crop": "Don't cut off feet or crop at ankles/knees" },
+      "lighting": ["Even light head to toe", "Open shade in bright sun"],
+      "pose": ["Weight on one leg", "Bend the other knee slightly", "One foot slightly forward", "Angle your body a little", "Arms relaxed, not pressed to your sides"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Lens choice; General"
+    },
+    {
+      "id": "people.mirrorFit",
+      "category": "people", "photoType": "mirrorFit",
+      "match": { "people": "1", "camera": "back" },
+      "lens": { "zoom": 1 },
+      "camera": { "height": "Chest height", "angle": "Level", "pitchMin": -5, "pitchMax": 5 },
+      "framing": { "placement": "Whole outfit in frame", "notes": ["Stand 4–5 ft from the mirror", "Clean background behind you"] },
+      "lighting": ["Light facing you, not behind you"],
+      "pose": ["Stand 4–5 ft from the mirror", "Phone at chest height", "Angle your body about 30°", "Hold the phone slightly to the side", "Weight on one leg", "Bend the other knee slightly", "One foot slightly forward"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Mirror fit"
+    },
+    {
+      "id": "people.selfie",
+      "category": "people",
+      "match": { "people": "1", "camera": "front" },
+      "lens": { "zoom": 1 },
+      "camera": { "height": "Slightly above eye level", "angle": "Tilted slightly down", "pitchMin": -20, "pitchMax": 0 },
+      "framing": { "placement": "Eyes on the upper third", "notes": ["Warn if the phone is too close (distortion)"] },
+      "lighting": ["Turn toward the light"],
+      "pose": ["Chin forward and slightly down", "Turn toward the light", "Relax your shoulders"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Front selfie"
+    },
+    {
+      "id": "people.solo",
+      "category": "people",
+      "match": { "people": "1" },
+      "lens": { "zoom": 1, "fallbackZoom": 2 },
+      "camera": { "height": "Chest to eye level", "angle": "Level", "pitchMin": -5, "pitchMax": 10 },
+      "framing": { "placement": "Subject on the nearest third", "headroom": "Some space above the head", "crop": "Never at a joint" },
+      "lighting": ["Face toward soft light"],
+      "pose": ["Angle your body a little", "Weight on one leg", "Chin slightly down"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: General"
+    },
+    {
+      "id": "people.kid",
+      "category": "people",
+      "match": { "people": "1", "personTypes": ["kid"] },
+      "lens": { "zoom": 2, "fallbackZoom": 1 },
+      "camera": { "height": "Crouch to the child's eye level", "angle": "Level", "pitchMin": -5, "pitchMax": 5 },
+      "framing": { "placement": "Subject on a third", "headroom": "Some space above the head" },
+      "lighting": ["Open shade, soft light"],
+      "pose": ["Crouch to their eye level", "Let them play or hold a toy", "Shoot bursts; kids move fast"],
+      "autoSettings": { "exposure": "face", "shutter": "fast", "whiteBalance": "skin" },
+      "source": "Person types (camera height for kids)"
+    },
+    {
+      "id": "people.duo",
+      "category": "people",
+      "match": { "people": "2" },
+      "lens": { "zoom": 1, "note": "0.5x only if you can't fit both and can't step back." },
+      "camera": { "height": "Slightly above eye level", "angle": "Tilted slightly down", "pitchMin": 0, "pitchMax": 12 },
+      "framing": { "placement": "Pair centred or on a third", "headroom": "Some space above the taller head" },
+      "lighting": ["Both faces in the same light"],
+      "pose": ["Angle bodies 45° toward each other", "Heads at different heights", "Front person: half-step forward", "Shoulders touching, lean in"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Duo / group"
+    },
+    {
+      "id": "people.trio",
+      "category": "people",
+      "match": { "people": "3" },
+      "lens": { "zoom": 1, "note": "0.5x only if you can't fit everyone and can't step back." },
+      "camera": { "height": "Slightly above eye level", "angle": "Tilted slightly down", "pitchMin": 0, "pitchMax": 12 },
+      "framing": { "placement": "Triangle of heads, centred", "headroom": "Some space above the tallest head" },
+      "lighting": ["Everyone's face in the same light"],
+      "pose": ["Make a triangle", "One person sits or kneels", "Two stand at different heights", "Close the gaps, lean in"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Duo / group"
+    },
+    {
+      "id": "people.group",
+      "category": "people",
+      "match": { "people": "4+" },
+      "lens": { "zoom": 1, "note": "0.5x only if you can't fit everyone and can't step back." },
+      "camera": { "height": "Slightly above eye level", "angle": "Tilted slightly down", "pitchMin": 0, "pitchMax": 15 },
+      "framing": { "placement": "Group centred", "headroom": "Some space above the tallest head", "notes": ["Every face visible between shoulders in front"] },
+      "lighting": ["Everyone's face in the same light"],
+      "pose": ["Tallest person in the middle as anchor", "Build out from the anchor", "Stagger head heights", "Faces between front shoulders", "Close the gaps, lean in"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Duo / group"
+    },
+    {
+      "id": "people.casual.duo",
+      "category": "people", "photoType": "casual",
+      "match": { "people": "2" },
+      "lens": { "zoom": 1 },
+      "camera": { "height": "Chest height", "angle": "Level", "pitchMin": -5, "pitchMax": 10 },
+      "framing": { "placement": "Pair on a third", "headroom": "Some space above the taller head" },
+      "lighting": ["Both faces in the same light"],
+      "pose": ["Stand close, angled toward each other", "Heads at different heights", "Laugh at something together", "Look at each other, then the lens"],
+      "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
+      "source": "SPEC: Duo / group; Poses (Casual)"
+    },
+
+    {
+      "id": "building.fullFacade",
+      "category": "building", "photoType": "fullFacade",
+      "lens": { "zoom": 1, "fallbackZoom": 2, "note": "Step back instead of 0.5x; wide angles bend the lines." },
+      "camera": { "height": "Chest height; higher vantage point if it doesn't fit", "angle": "Phone perfectly level", "pitchMin": -3, "pitchMax": 3 },
+      "framing": { "placement": "Symmetrical: dead centre. Otherwise: thirds.", "notes": ["If you tilt up: keep phone level, step back", "Offer vertical-line correction after capture"] },
+      "lighting": ["Golden hour: warm, textured facades", "Blue hour (20–30 min after sunset): lit buildings"],
+      "autoSettings": { "exposure": "balanced", "hdr": "on", "lowLight": "merge", "whiteBalance": "auto" },
+      "source": "SPEC: Building / architecture; Lens choice"
+    },
+    {
+      "id": "building.details",
+      "category": "building", "photoType": "details",
+      "lens": { "zoom": 4, "fallbackZoom": 8, "note": "Zoom in on patterns, windows, doors, textures." },
+      "camera": { "height": "Straight on to the detail", "angle": "Square to the surface", "pitchMin": -10, "pitchMax": 10 },
+      "framing": { "placement": "Fill the frame with the pattern", "notes": ["Repeat patterns edge to edge"] },
+      "lighting": ["Side light brings out texture"],
+      "autoSettings": { "exposure": "balanced", "hdr": "auto", "shutter": "fast" },
+      "source": "SPEC: Building / architecture"
+    },
+    {
+      "id": "building.lowAngle",
+      "category": "building", "photoType": "lowAngle",
+      "lens": { "zoom": 0.5, "fallbackZoom": 1, "note": "Here converging lines are the point." },
+      "camera": { "height": "Low, near the ground", "angle": "Pointing up", "pitchMin": -70, "pitchMax": -25 },
+      "framing": { "placement": "Centre symmetrical buildings; lines leading to the top", "notes": ["Get close to the base"] },
+      "lighting": ["Sky behind the building: expose for the sky"],
+      "autoSettings": { "exposure": "sky", "hdr": "on", "whiteBalance": "auto" },
+      "source": "SPEC: Building / architecture (deliberate exception to the 0.5x rule)"
+    },
+
+    {
+      "id": "food.overhead",
+      "category": "food", "photoType": "overhead",
+      "lens": { "zoom": 1, "fallbackZoom": 2, "note": "Never 0.5x." },
+      "camera": { "height": "Directly above the dish", "angle": "Phone parallel to the table", "pitchMin": 80, "pitchMax": 95 },
+      "framing": { "placement": "Dish centred or on a third", "notes": ["Best for flat dishes: pizza, salads, bowls, boards", "Wipe the plate rim"] },
+      "lighting": ["Light from the side or behind", "Never from the front", "Watch for your own shadow"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto" },
+      "source": "SPEC: Food"
+    },
+    {
+      "id": "food.fortyFive",
+      "category": "food", "photoType": "fortyFive",
+      "lens": { "zoom": 1, "fallbackZoom": 2, "note": "Never 0.5x." },
+      "camera": { "height": "Seated eye height", "angle": "About 45° down", "pitchMin": 35, "pitchMax": 55 },
+      "framing": { "placement": "Dish on a third", "notes": ["Works for most dishes", "Wipe the plate rim"] },
+      "lighting": ["Light from the side or behind", "Never from the front"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto" },
+      "source": "SPEC: Food"
+    },
+    {
+      "id": "food.closeUp",
+      "category": "food", "photoType": "foodCloseUp",
+      "lens": { "zoom": 2, "fallbackZoom": 1, "note": "Never 0.5x." },
+      "camera": { "height": "At the food's eye level", "angle": "Straight on", "pitchMin": -5, "pitchMax": 15 },
+      "framing": { "placement": "Fill the frame with the best part", "notes": ["Best for tall/layered dishes: burgers, cakes, drinks, stacks"] },
+      "lighting": ["Back or side light makes food glow", "Never from the front"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto", "depth": true },
+      "source": "SPEC: Food"
+    },
+
+    {
+      "id": "sky.wideScene",
+      "category": "sky", "photoType": "wideScene",
+      "lens": { "zoom": 1, "fallbackZoom": 0.5 },
+      "camera": { "height": "Chest height; low if there's a foreground", "angle": "Horizon perfectly level", "pitchMin": -10, "pitchMax": 10 },
+      "framing": { "placement": "Horizon on lower third if sky is the star, upper third if the ground is; never centre", "notes": ["Add a foreground element (tree, rock, person)"] },
+      "lighting": ["Best 20–30 min either side of sunset"],
+      "autoSettings": { "exposure": "balanced", "hdr": "on", "whiteBalance": "auto" },
+      "source": "SPEC: Sunset / sky / landscape"
+    },
+    {
+      "id": "sky.sunsetSilhouette",
+      "category": "sky", "photoType": "sunsetSilhouette",
+      "lens": { "zoom": 1 },
+      "camera": { "height": "Low, so people are against open sky", "angle": "Level", "pitchMin": -20, "pitchMax": 5 },
+      "framing": { "placement": "Horizon on the lower third", "notes": ["Leave a gap between people so silhouettes don't merge"] },
+      "lighting": ["Expose for the sky; let the foreground go dark", "Keep shooting after the sun sets"],
+      "autoSettings": { "exposure": "sky", "hdr": "off", "whiteBalance": "warm" },
+      "source": "SPEC: Sunset / sky / landscape; Auto camera settings"
+    },
+    {
+      "id": "sky.zoomedSun",
+      "category": "sky", "photoType": "zoomedSun",
+      "lens": { "zoom": 8, "fallbackZoom": 4, "note": "Makes a distant sun or subject look bigger." },
+      "camera": { "height": "Any; brace the phone", "angle": "Level", "pitchMin": -10, "pitchMax": 10 },
+      "framing": { "placement": "Sun or subject on a third; horizon on a third" },
+      "lighting": ["Expose for the sun and sky"],
+      "autoSettings": { "exposure": "sky", "hdr": "off", "shutter": "fast", "whiteBalance": "warm" },
+      "source": "SPEC: Lens choice; Sunset"
+    },
+
+    {
+      "id": "object.product",
+      "category": "object", "photoType": "product",
+      "lens": { "zoom": 2, "fallbackZoom": 1, "note": "2x avoids distortion." },
+      "camera": { "height": "Level with the object or slightly above", "angle": "Level", "pitchMin": -5, "pitchMax": 25 },
+      "framing": { "placement": "Centred, or on a third", "notes": ["Clean, plain background"] },
+      "lighting": ["Soft side light", "Avoid harsh reflections"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto", "depth": true },
+      "source": "SPEC: Lens choice; General"
+    },
+    {
+      "id": "object.closeUp",
+      "category": "object", "photoType": "objectCloseUp",
+      "lens": { "zoom": 1, "note": "Move close; iOS switches to macro automatically." },
+      "camera": { "height": "Close to the object", "angle": "Whatever shows the detail", "pitchMin": -30, "pitchMax": 90 },
+      "framing": { "placement": "Fill the frame with the detail" },
+      "lighting": ["Side light shows texture"],
+      "autoSettings": { "exposure": "subject", "hdr": "auto", "lowLight": "quality" },
+      "source": "SPEC: Lens choice (close-up object → macro)"
+    },
+    {
+      "id": "object.flatLay",
+      "category": "object", "photoType": "flatLay",
+      "lens": { "zoom": 1 },
+      "camera": { "height": "Directly above", "angle": "Phone parallel to the surface", "pitchMin": 80, "pitchMax": 95 },
+      "framing": { "placement": "Arrange items on a grid; space between them" },
+      "lighting": ["Even, soft light", "Watch for your own shadow"],
+      "autoSettings": { "exposure": "balanced", "hdr": "auto" },
+      "source": "SPEC: Food (overhead technique)"
+    },
+
+    {
+      "id": "general.default",
+      "category": "general",
+      "lens": { "zoom": 1 },
+      "camera": { "height": "Chest height", "angle": "Level", "pitchMin": -10, "pitchMax": 10 },
+      "framing": { "placement": "Subject on the nearest third" },
+      "lighting": ["Find the soft light"],
+      "autoSettings": { "exposure": "balanced", "hdr": "auto" },
+      "source": "SPEC: General"
+    }
+  ],
+
+  "lighting": [
+    { "id": "light.harsh", "when": "harsh", "appliesTo": ["people"], "steps": ["Move into open shade", "Face toward open sky", "Can't move? Put the sun behind them"] },
+    { "id": "light.backlit", "when": "backlit", "appliesTo": ["people"], "steps": ["Light is behind you, turn around"] },
+    { "id": "light.sideDark", "when": "sideDark", "appliesTo": ["people"], "steps": ["Turn toward the window/light"] },
+    { "id": "light.dark", "when": "dark", "appliesTo": ["people", "building", "food", "sky", "object", "general"], "steps": ["Find more light or hold still"] },
+    { "id": "light.foodFront", "when": "harsh", "appliesTo": ["food"], "steps": ["Light from the side, not the front"] }
+  ]
+}

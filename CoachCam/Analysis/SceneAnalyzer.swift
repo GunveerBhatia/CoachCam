@@ -81,7 +81,7 @@ final class SceneAnalyzer: ObservableObject {
     // MARK: - Frame intake (called on the camera's video queue)
 
     /// Offers a camera frame. Returns immediately; most frames are skipped on purpose.
-    func submit(_ sampleBuffer: CMSampleBuffer, rotationAngle: CGFloat, isFrontCamera: Bool) {
+    func submit(_ sampleBuffer: CMSampleBuffer, info: FrameInfo) {
         let now = CACurrentMediaTime()
         gate.lock()
         let tooSoon = now - lastStart < 1.0 / config.analysis.fastHz
@@ -97,9 +97,9 @@ final class SceneAnalyzer: ObservableObject {
             markIdle()
             return
         }
-        let geometry = FrameGeometry(rotationAngle: rotationAngle)
+        let geometry = FrameGeometry(rotationAngle: info.rotationAngle)
         queue.async {
-            self.analyze(pixelBuffer, geometry: geometry, isFrontCamera: isFrontCamera)
+            self.analyze(pixelBuffer, geometry: geometry, info: info)
             self.markIdle()
         }
     }
@@ -112,7 +112,7 @@ final class SceneAnalyzer: ObservableObject {
 
     // MARK: - Analysis (on `queue`)
 
-    private func analyze(_ pixelBuffer: CVPixelBuffer, geometry: FrameGeometry, isFrontCamera: Bool) {
+    private func analyze(_ pixelBuffer: CVPixelBuffer, geometry: FrameGeometry, info: FrameInfo) {
         loadModelIfNeeded()
         let start = CACurrentMediaTime()
         tick += 1
@@ -201,7 +201,12 @@ final class SceneAnalyzer: ObservableObject {
 
         var analysis = SceneAnalysis()
         analysis.timestamp = start
-        analysis.isFrontCamera = isFrontCamera
+        analysis.isFrontCamera = info.isFrontCamera
+        analysis.lensPosition = info.lensPosition
+        analysis.horizontalFOV = info.horizontalFOV
+        analysis.isMacro = info.isMacro
+        analysis.rotationAngle = geometry.angle
+        analysis.verticalLines = measured.verticalLines
         analysis.people = people
         analysis.objects = objects
         analysis.labels = slowLabels
