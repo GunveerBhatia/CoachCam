@@ -8,7 +8,7 @@ struct DebugOverlay: View {
     @ObservedObject var motion: MotionService
     @ObservedObject var analyzer: SceneAnalyzer
     @ObservedObject var live: LiveDescription
-    @ObservedObject var planner: RulePlanner
+    @ObservedObject var ranker: SuggestionRanker
     @ObservedObject var guide: StepGuide
 
     var body: some View {
@@ -17,7 +17,7 @@ struct DebugOverlay: View {
         VStack(alignment: .leading, spacing: 2) {
             row("Subject", "\(d.category.title) ← \(d.proposed.title): \(d.reason)")
             if !d.checks.isEmpty { row("Checks", d.checks.joined(separator: " · ")) }
-            row("Rule", planner.current.map { "\($0.rule.id) (\($0.why))" } ?? "—")
+            row("Shot", (ranker.selected.map { "\($0.id) (picked)" } ?? "—") + " · top: " + ranker.ranked.prefix(3).map { "\($0.id) \($0.why)" }.joined(separator: "; "))
             row("Step", guide.debugText)
             row("People", peopleText(a, d))
             row("Objects", a.objects.isEmpty ? "none" :

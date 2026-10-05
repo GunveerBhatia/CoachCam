@@ -83,7 +83,7 @@ final class AutoSettingsEngine: ObservableObject {
 
     // MARK: - The loop
 
-    func update(rule: Playbook.Rule?, photoType: PhotoType?, description d: SceneDescription, analysis a: SceneAnalysis,
+    func update(rule: Playbook.Rule?, lensFollowsRule: Bool, description d: SceneDescription, analysis a: SceneAnalysis,
                 camera: CameraService, iso: Float, shake: Double, subjectBox: CGRect?) {
         let now = CACurrentMediaTime()
         var newBadges: [AutoBadge] = []
@@ -94,9 +94,9 @@ final class AutoSettingsEngine: ObservableObject {
         let mainPerson = a.people.first
 
         // 1. Lens (back camera only).
-        if let rule, !d.isFrontCamera, d.category != .general {
+        if let rule, lensFollowsRule, !d.isFrontCamera, d.category != .general {
             var wanted = CGFloat(rule.lens.zoom)
-            var why = photoType?.title ?? d.category.title
+            var why = rule.title
             // Too close for the headshot lens → use the fallback (coaching will say "step back").
             if wanted >= 4, let face = mainPerson?.faceArea, face > config.headshotTooCloseFaceArea,
                let fallback = rule.lens.fallbackZoom {

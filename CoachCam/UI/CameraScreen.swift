@@ -8,16 +8,16 @@ import SwiftUI
 ///   lens buttons → thumbnail · shutter · flip. Coaching pill and Ideas button come later.
 ///
 /// Data flow: camera frames → SceneAnalyzer (12×/s) → SceneDescriber (what's in the frame)
-/// → RulePlanner (detection + your photo type → playbook rule).
+/// → SuggestionRanker (shot cards that fit) → your card drives auto settings + step guide.
 struct CameraScreen: View {
     @StateObject private var camera = CameraService()
     @StateObject private var describer = SceneDescriber()
-    @StateObject private var photoTypes = PhotoTypeStore()
+    @StateObject private var subjectOverride = SubjectOverride()
     // @State (not @StateObject) so this screen doesn't redraw 12–20×/second with the gyro
     // or every analysis; only the small views that show that data observe them.
     @State private var motion = MotionService()
     @State private var analyzer = SceneAnalyzer()
-    @State private var planner = RulePlanner()
+    @State private var ranker = SuggestionRanker()
     @State private var personTypes = PersonTypeTracker()
     @State private var objectNames = ObjectLabelTracker()
     @State private var autoSettings = AutoSettingsEngine()
@@ -45,6 +45,7 @@ struct CameraScreen: View {
                 VStack(spacing: 0) {
                     topBar
                     viewfinder
+                    SuggestionCardsRow(ranker: ranker).padding(.top, 6)
                     Spacer(minLength: 8)
                     AutoBadgesRow(engine: autoSettings, camera: camera)
                     lensButtons
@@ -91,8 +92,8 @@ struct CameraScreen: View {
     private func connectAnalysis() {
         let analyzer = self.analyzer
         let describer = self.describer
-        let photoTypes = self.photoTypes
-        let planner = self.planner
+        let subjectOverride = self.subjectOverride
+        let ranker = self.ranker
         let personTypes = self.personTypes
         let objectNames = self.objectNames
         let autoSettings = self.autoSettings
@@ -107,26 +108,30 @@ struct CameraScreen: View {
                                                levelError: motion.levelError)
             personTypes.update(with: analysis)
             objectNames.update(with: analysis)
-            let category = photoTypes.effectiveCategory(detected: description.category)
-            let photoType = photoTypes.choice(for: category)
-            planner.update(category: category, photoType: photoType,
-                           description: description, personTypes: personTypes.currentTypes)
-            // M3: set the camera from the chosen rule + the live scene.
-            autoSettings.update(rule: planner.current?.rule, photoType: photoType, description: description,
-                                analysis: analysis, camera: camera, iso: camera.stats.iso, shake: motion.shake,
+            let category = subjectOverride.effective(detected: description.category)
+            // M5: shot suggestion cards that fit the scene.
+            let tags = SuggestionRanker.sceneTags(description: description, analysis: analysis,
+                                                  personTypes: personTypes.currentTypes)
+            ranker.update(category: category, tags: tags)
+            // M3: set the camera from your card (or the best fit) + the live scene.
+            // The lens only follows a card you tapped.
+            autoSettings.update(rule: ranker.active, lensFollowsRule: ranker.selected != nil,
+                                description: description, analysis: analysis, camera: camera,
+                                iso: camera.stats.iso, shake: motion.shake,
                                 subjectBox: describer.subjects.subject?.box)
             // M4: step-by-step guidance for the chosen rule.
             let person = describer.subjects.lockedPerson(in: analysis) ?? analysis.people.first
             let context = StepContext(description: description, analysis: analysis, levelError: motion.levelError,
                                       cameraPitch: motion.cameraPitch, shake: motion.shake, person: person,
                                       subjectBox: describer.subjects.subject?.box ?? person?.box ?? analysis.objects.first?.box)
-            guide.update(rule: planner.current?.rule, context: context)
+            // Steps only run for a card you tapped.
+            guide.update(rule: ranker.selected, context: context)
         }
     }
 
     private var topBar: some View {
         HStack {
-            ShotPicker(describer: describer, store: photoTypes, objectNames: objectNames)
+            SubjectChip(describer: describer, override: subjectOverride, objectNames: objectNames)
             Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill")
@@ -169,7 +174,7 @@ struct CameraScreen: View {
                     VStack {
                         HStack {
                             DebugOverlay(camera: camera, stats: camera.stats, motion: motion, analyzer: analyzer,
-                                         live: describer.live, planner: planner, guide: guide)
+                                         live: describer.live, ranker: ranker, guide: guide)
                             Spacer()
                         }
                         Spacer()

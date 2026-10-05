@@ -152,6 +152,12 @@ enum StepEvaluator {
             return c.description.lighting.isHarsh ? StepResult(status: .fail, arrow: ArrowType.none, detail: "harsh")
                 : StepResult(status: .pass, arrow: nil, detail: "ok")
 
+        case "noFace":
+            // Back / faceless shots: a person is there but their face isn't visible.
+            guard let p = c.person else { return unknown }
+            return p.faceBox == nil ? StepResult(status: .pass, arrow: nil, detail: "no face")
+                : StepResult(status: .fail, arrow: .subjectTurnLeft, detail: "face visible")
+
         case "manual":
             return StepResult(status: .unknown, arrow: nil, detail: "tap ✓ when done")
 
