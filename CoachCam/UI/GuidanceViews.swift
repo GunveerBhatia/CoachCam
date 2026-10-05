@@ -5,6 +5,8 @@ import SwiftUI
 /// Shows "Take it" when every step is done.
 struct CoachingPill: View {
     @ObservedObject var guide: StepGuide
+    /// ✕: stop this shot and go back to the suggestion cards.
+    let onCancel: () -> Void
 
     var body: some View {
         VStack(spacing: 5) {
@@ -37,6 +39,10 @@ struct CoachingPill: View {
                     Button("Skip") { guide.skip() }
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.8))
+                    Button { onCancel() } label: {
+                        Image(systemName: "xmark").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(.white.opacity(0.7))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)

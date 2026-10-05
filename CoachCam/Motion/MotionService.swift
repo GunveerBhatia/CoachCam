@@ -13,6 +13,11 @@ final class MotionService: ObservableObject {
     @Published private(set) var levelError: Double = 0
     @Published private(set) var cameraPitch: Double = 0
     @Published private(set) var shake: Double = 0
+    /// How many degrees the phone turned in the last second (detects pointing at a new scene).
+    @Published private(set) var recentTurnDegrees: Double = 0
+
+    private var turnHistory: [(time: TimeInterval, degrees: Double)] = []
+    private let smoothing = AppConfig.shared.stages.motionSmoothing
 
     private let manager = CMMotionManager()
     private let queue = OperationQueue()
@@ -33,11 +38,19 @@ final class MotionService: ObservableObject {
             let pitch = asin(max(-1, min(1, -g.z))) * 180 / .pi
             let r = motion.rotationRate
             let rotation = sqrt(r.x * r.x + r.y * r.y + r.z * r.z)
+            let now = motion.timestamp
             DispatchQueue.main.async {
-                self.rollDegrees = roll
-                self.levelError = level
-                self.cameraPitch = pitch
-                self.shake = self.shake * 0.8 + rotation * 0.2   // Simple smoothing.
+                // Low-pass filter so tiny hand tremors don't make guides and steps flicker.
+                // (Landscape/portrait flips jump straight to the new value.)
+                let a = self.smoothing
+                self.rollDegrees = abs(roll - self.rollDegrees) > 45 ? roll : self.rollDegrees * (1 - a) + roll * a
+                self.levelError = abs(level - self.levelError) > 20 ? level : self.levelError * (1 - a) + level * a
+                self.cameraPitch = self.cameraPitch * (1 - a) + pitch * a
+                self.shake = self.shake * 0.8 + rotation * 0.2
+                // Degrees turned over the last second (rotation rate × time).
+                self.turnHistory.append((now, rotation * 180 / .pi / 20))
+                self.turnHistory.removeAll { now - $0.time > 1 }
+                self.recentTurnDegrees = self.turnHistory.reduce(0) { $0 + $1.degrees }
             }
         }
     }

@@ -55,6 +55,11 @@ struct StepCheck: Codable {
     /// placement: "thirds" or "center". subjectSize: "height", "faceArea" or "area".
     var target: String?
     var measure: String?
+    /// The wide "undo" band: a completed step only comes back if the value stays outside
+    /// this band for undoSeconds (defaults: config.json → guide).
+    var undoMin: Double?
+    var undoMax: Double?
+    var undoSeconds: Double?
 }
 
 /// One coaching step: short text, an arrow, and a check.

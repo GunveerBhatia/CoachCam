@@ -97,10 +97,23 @@
   },
 
   "guide": {
-    "_readme": "Step-by-step guidance. A step counts as done after its check passes for holdSeconds (a step can override with 'hold'). A finished step that fails for undoGraceSeconds becomes the current step again. The ✓ shows for checkMarkSeconds.",
+    "_readme": "Step stability. Every check value is smoothed (smoothing = how much each new reading counts, 0-1; lower = steadier). A step completes when its value stays inside its tight band (playbook min/max) for holdSeconds, then it is LATCHED: it only becomes undone if the value stays outside the wide band (playbook undoMin/undoMax, or the tight band widened by undoWiden x its width each side, at least undoMinMargin) for undoSeconds. maxSteps: a shot never shows more than this many steps.",
+    "smoothing": 0.25,
     "holdSeconds": 0.4,
-    "undoGraceSeconds": 0.6,
-    "checkMarkSeconds": 0.6
+    "undoSeconds": 1.0,
+    "undoWiden": 0.5,
+    "undoMinMargin": 2.0,
+    "checkMarkSeconds": 0.6,
+    "maxSteps": 4
+  },
+
+  "stages": {
+    "_readme": "Stage machine: SEARCHING -> LOCKED -> GUIDING -> READY -> REVIEW. Goes back only when you cancel, the subject is lost for lostSubjectSeconds, or (only while LOCKED) the phone turns to a new scene: turned more than newSceneTurnDegrees within a second AND the picture changed more than newSceneFrameChange. Auto-start: guiding starts autoStartDelaySeconds after a lock with the best card pre-selected (turn off in Settings).",
+    "lostSubjectSeconds": 2.0,
+    "newSceneTurnDegrees": 40,
+    "newSceneFrameChange": 0.12,
+    "autoStartDelaySeconds": 1.5,
+    "motionSmoothing": 0.2
   },
 
   "people": {
@@ -121,7 +134,7 @@
   "subject": {
     "_readme": "Tap-to-select: the tapped person/object is followed by overlap between frames; released if it's gone this long.",
     "minOverlapToFollow": 0.3,
-    "releaseAfterSeconds": 1.5
+    "releaseAfterSeconds": 2.0
   },
 
   "light": {

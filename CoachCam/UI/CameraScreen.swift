@@ -3,12 +3,13 @@ import SwiftUI
 
 /// The main camera screen.
 ///
-/// Layout (top to bottom):
-///   top bar (subject · photo type picker, settings) → 3:4 viewfinder with guides →
-///   lens buttons → thumbnail · shutter · flip. Coaching pill and Ideas button come later.
+/// What you see depends on the stage (StageMachine):
+///   SEARCHING: just the camera · LOCKED: subject label + suggestion cards ·
+///   GUIDING: subject label + one step + dots · READY: "Take it" + green shutter.
+/// Lens, exposure, HDR, low light and white balance are set silently (debug overlay only).
 ///
-/// Data flow: camera frames → SceneAnalyzer (12×/s) → SceneDescriber (what's in the frame)
-/// → SuggestionRanker (shot cards that fit) → your card drives auto settings + step guide.
+/// Data flow: camera frames → SceneAnalyzer (12×/s) → SceneDescriber → StageMachine
+/// (lock, frozen cards, guiding) → AutoSettingsEngine + StepGuide.
 struct CameraScreen: View {
     @StateObject private var camera = CameraService()
     @StateObject private var describer = SceneDescriber()
@@ -17,7 +18,7 @@ struct CameraScreen: View {
     // or every analysis; only the small views that show that data observe them.
     @State private var motion = MotionService()
     @State private var analyzer = SceneAnalyzer()
-    @State private var ranker = SuggestionRanker()
+    @StateObject private var stage = StageMachine()
     @State private var personTypes = PersonTypeTracker()
     @State private var objectNames = ObjectLabelTracker()
     @State private var autoSettings = AutoSettingsEngine()
@@ -27,7 +28,6 @@ struct CameraScreen: View {
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
     @AppStorage(SettingsKey.showGrid) private var showGrid = true
     @AppStorage(SettingsKey.showLevel) private var showLevel = true
-    @AppStorage(SettingsKey.showPersonLabels) private var showPersonLabels = true
 
     @State private var showSettings = false
     @State private var focusPoint: CGPoint?
@@ -45,9 +45,12 @@ struct CameraScreen: View {
                 VStack(spacing: 0) {
                     topBar
                     viewfinder
-                    SuggestionCardsRow(ranker: ranker).padding(.top, 6)
+                    SuggestionCardsRow(stage: stage) { suggestion in
+                        stage.pick(suggestion, guide: guide)
+                    }
+                    .padding(.top, 6)
+                    .animation(.easeOut(duration: 0.2), value: stage.stage)
                     Spacer(minLength: 8)
-                    AutoBadgesRow(engine: autoSettings, camera: camera)
                     lensButtons
                     bottomBar
                 }
@@ -93,7 +96,7 @@ struct CameraScreen: View {
         let analyzer = self.analyzer
         let describer = self.describer
         let subjectOverride = self.subjectOverride
-        let ranker = self.ranker
+        let stage = self.stage
         let personTypes = self.personTypes
         let objectNames = self.objectNames
         let autoSettings = self.autoSettings
@@ -109,29 +112,36 @@ struct CameraScreen: View {
             personTypes.update(with: analysis)
             objectNames.update(with: analysis)
             let category = subjectOverride.effective(detected: description.category)
-            // M5: shot suggestion cards that fit the scene.
             let tags = SuggestionRanker.sceneTags(description: description, analysis: analysis,
                                                   personTypes: personTypes.currentTypes)
-            ranker.update(category: category, tags: tags)
-            // M3: set the camera from your card (or the best fit) + the live scene.
-            // The lens only follows a card you tapped.
-            autoSettings.update(rule: ranker.active, lensFollowsRule: ranker.selected != nil,
+            // The stage machine locks, freezes the cards, and runs the guide (no flicker).
+            let subjects = describer.subjects
+            stage.update(category: category, description: description, analysis: analysis, tags: tags,
+                         subjects: subjects, motion: motion, guide: guide) {
+                let person = subjects.lockedPerson(in: analysis)
+                    ?? (stage.lockedCategory == .people ? analysis.people.first : nil)
+                return StepContext(description: description, analysis: analysis, levelError: motion.levelError,
+                                   cameraPitch: motion.cameraPitch, shake: motion.shake, person: person,
+                                   subjectBox: subjects.subject?.box ?? person?.box)
+            }
+            // Silent automatic settings from the active suggestion + live scene. The lens only
+            // follows the suggestion once guiding has started.
+            let guiding = stage.stage == .guiding || stage.stage == .ready
+            autoSettings.update(rule: stage.active ?? stage.cards.first?.suggestion, lensFollowsRule: guiding,
                                 description: description, analysis: analysis, camera: camera,
-                                iso: camera.stats.iso, shake: motion.shake,
-                                subjectBox: describer.subjects.subject?.box)
-            // M4: step-by-step guidance for the chosen rule.
-            let person = describer.subjects.lockedPerson(in: analysis) ?? analysis.people.first
-            let context = StepContext(description: description, analysis: analysis, levelError: motion.levelError,
-                                      cameraPitch: motion.cameraPitch, shake: motion.shake, person: person,
-                                      subjectBox: describer.subjects.subject?.box ?? person?.box ?? analysis.objects.first?.box)
-            // Steps only run for a card you tapped.
-            guide.update(rule: ranker.selected, context: context)
-        }
+                                iso: camera.stats.iso, shake: motion.shake, subjectBox: subjects.subject?.box)        }
     }
 
     private var topBar: some View {
         HStack {
-            SubjectChip(describer: describer, override: subjectOverride, objectNames: objectNames)
+            SubjectChip(stage: stage, override: subjectOverride, objectNames: objectNames, personTypes: personTypes,
+                        subjects: describer.subjects,
+                        onUnlock: { stage.unlock(subjects: describer.subjects, guide: guide, reason: "you unlocked") },
+                        onForce: { category in
+                            subjectOverride.set(category)
+                            stage.unlock(subjects: describer.subjects, guide: guide, reason: "you changed the subject")
+                        },
+                        onRename: { label, name in renameObject(label, to: name) })
             Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill")
@@ -148,12 +158,11 @@ struct CameraScreen: View {
         GeometryReader { geo in
             ZStack {
                 CameraPreview(camera: camera)
-                if showGrid { GridOverlay() }
-                if showLevel { LevelOverlay(motion: motion) }
+                // Clean screen while searching: guides appear once a subject is locked.
+                if showGrid && stage.stage != .searching { GridOverlay() }
+                if showLevel && stage.stage != .searching { LevelOverlay(motion: motion) }
                 if showDebugOverlay { DetectionOverlay(analyzer: analyzer, camera: camera) }
                 SubjectBrackets(tracker: describer.subjects, camera: camera)
-                if showPersonLabels { PersonLabelsOverlay(tracker: personTypes, camera: camera) }
-                ObjectLabelsOverlay(tracker: objectNames, camera: camera, analyzer: analyzer)
                 HoldStillOverlay(engine: autoSettings)
                 StepArrowOverlay(guide: guide, camera: camera, subjectBox: {
                     let latest = analyzer.latest
@@ -161,7 +170,10 @@ struct CameraScreen: View {
                     return person?.faceBox ?? person?.box ?? describer.subjects.subject?.box ?? latest.objects.first?.box
                 })
                 VStack {
-                    CoachingPill(guide: guide).padding(.top, 8)
+                    if stage.stage == .guiding || stage.stage == .ready {
+                        CoachingPill(guide: guide) { stage.cancelSuggestion(guide: guide) }
+                            .padding(.top, 8)
+                    }
                     Spacer()
                 }
                 if let point = focusPoint {
@@ -174,7 +186,7 @@ struct CameraScreen: View {
                     VStack {
                         HStack {
                             DebugOverlay(camera: camera, stats: camera.stats, motion: motion, analyzer: analyzer,
-                                         live: describer.live, ranker: ranker, guide: guide)
+                                         live: describer.live, stage: stage, guide: guide, autoSettings: autoSettings)
                             Spacer()
                         }
                         Spacer()
@@ -204,15 +216,14 @@ struct CameraScreen: View {
                 }
             }
             .contentShape(Rectangle())
-            // Tap: focus there, and lock onto the person/object under your finger
-            // (tap empty space to go back to automatic).
+            // Tap: focus there. Tapping a different person/object locks onto it instead;
+            // tapping empty space only focuses (it never unlocks).
             .onTapGesture(coordinateSpace: .local) { location in
                 focusPoint = location
                 camera.focus(atLayerPoint: location)
                 autoSettings.userTapped()
                 if let point = camera.uprightPoint(fromLayerPoint: location) {
-                    let picked = describer.subjects.select(at: point, in: analyzer.latest)
-                    Log.info("Tap → \(picked)")
+                    handleTap(at: point)
                     offerIdentify(at: point)
                 }
             }
@@ -240,6 +251,39 @@ struct CameraScreen: View {
             identify.dismiss()
         }
     }
+    /// Lock onto the tapped person/object if it isn't already the subject.
+    private func handleTap(at point: CGPoint) {
+        let latest = analyzer.latest
+        let subjects = describer.subjects
+        let hitPerson = latest.people.filter { $0.box.contains(point) }.min { $0.box.area < $1.box.area }
+        let hitObject = latest.objects.filter { $0.box.contains(point) }.min { $0.box.area < $1.box.area }
+        let target: (SubjectTracker.Kind, CGRect)?
+        if let object = hitObject, hitPerson == nil || object.box.area < hitPerson!.box.area {
+            target = (.object(label: object.label), object.box)
+        } else if let person = hitPerson {
+            target = (.person, person.box)
+        } else {
+            target = nil
+        }
+        guard let target else { return }
+        let (kind, box) = target
+        if let current = subjects.subject, current.box.iou(box) > 0.5 { return }   // Already the subject.
+        let description = describer.live.description
+        let tags = SuggestionRanker.sceneTags(description: description, analysis: latest,
+                                              personTypes: personTypes.currentTypes)
+        stage.relock(to: kind, box: box, analysis: latest, tags: tags, subjects: subjects, guide: guide)
+    }
+
+    /// Your correction of the locked object's name (remembered with its fingerprint).
+    private func renameObject(_ label: ObjectLabel, to name: String) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        objectNames.assign(id: label.id, name: clean, source: .you)
+        if let print = analyzer.featurePrint(crop: label.box) {
+            ObjectMemory.shared.add(name: clean, source: .you, detectorLabel: label.name, print: print)
+        }
+    }
+
     private var pinchToZoom: some Gesture {
         MagnifyGesture()
             .onChanged { value in
@@ -306,7 +350,10 @@ struct CameraScreen: View {
             GuidedShutterButton(guide: guide, action: takePhoto)
                 .frame(maxWidth: .infinity)
 
-            Button { camera.flipCamera() } label: {
+            Button {
+                stage.unlock(subjects: describer.subjects, guide: guide, reason: "camera flipped")
+                camera.flipCamera()
+            } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.title2)
                     .foregroundStyle(.white)
@@ -392,6 +439,7 @@ struct CameraScreen: View {
         } else {
             camera.capturePhoto(quality: autoSettings.captureQuality)
         }
+        if stage.stage != .searching { stage.photoTaken(guide: guide) }
     }
 }
 

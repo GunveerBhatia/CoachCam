@@ -1,13 +1,14 @@
 import UIKit
 
-/// Runs the step-by-step walkthrough for the current playbook rule.
+/// Runs the step-by-step walkthrough for the active suggestion, without flicker.
 ///
-/// - One step at a time; a step is done when its check has passed for `hold` seconds
-///   (~0.4 s) → a quick ✓, one light haptic, next step.
-/// - If a finished step comes undone for a moment (you drift off level), it quietly
-///   becomes the current step again.
-/// - Skip a step you don't care about; swipe back to revisit the previous one.
-/// - All steps done → "Take it", green shutter, one success haptic (not repeated).
+/// - Every check value is smoothed (moving average) before it's judged.
+/// - A step completes when the smoothed value stays inside its TIGHT band for `hold` seconds
+///   (~0.4 s) → ✓, one light haptic, next step. Then it is LATCHED.
+/// - A latched step only comes back if the value stays outside its WIDE band for
+///   `undoSeconds` (~1 s). Small drift never re-shows it (this fixes the 45° loop).
+/// - All steps latched → `allDone` ("Take it"). It stays done unless a step really comes undone.
+/// - At most `maxSteps` (4) steps per shot. Skip a step, or swipe back to revisit one.
 final class StepGuide: ObservableObject {
     struct Display: Equatable {
         var text: String
@@ -23,54 +24,89 @@ final class StepGuide: ObservableObject {
     @Published private(set) var allDone = false
     /// Briefly true right after a step completes (shows the ✓).
     @Published private(set) var justCompleted = false
-    /// Which step the debug overlay should explain, and its measured value.
+    /// Live numbers for the current step (debug overlay).
     @Published private(set) var debugText = "—"
 
     private let config = AppConfig.shared.guide
-    private var ruleID: String?
+    private var suggestionID: String?
     private var steps: [GuideStep] = []
-    private var states: [State] = []
+    private var states: [StepState] = []
     private var forcedIndex: Int?
 
-    private struct State {
-        var passingSince: TimeInterval?
-        var failingSince: TimeInterval?
-        var completed = false
+    private struct StepState {
+        var smoothed: Double?
+        var insideSince: TimeInterval?
+        var outsideSince: TimeInterval?
+        var latched = false
         var skipped = false
-        var manualDone = false
     }
 
-    /// Called after each analysis with the rule in use.
-    func update(rule: Playbook.Rule?, context: StepContext) {
-        let now = CACurrentMediaTime()
-        if rule?.id != ruleID { load(rule) }
+    /// Starts (or restarts) the walkthrough for a suggestion; nil stops it.
+    func start(_ suggestion: Playbook.Suggestion?) {
+        suggestionID = suggestion?.id
+        let all = suggestion.map { Playbook.shared.steps(for: $0) } ?? []
+        steps = Array(all.prefix(config.maxSteps))
+        states = steps.map { _ in StepState() }
+        forcedIndex = nil
+        allDone = false
+        display = nil
+        dots = []
+        if let suggestion { Log.info("Guide: \(suggestion.id), \(steps.count) steps") }
+    }
+
+    var isRunning: Bool { suggestionID != nil }
+
+    /// Called after each analysis while guiding.
+    func update(context: StepContext) {
         guard !steps.isEmpty else {
-            if display != nil { display = nil; dots = []; allDone = false }
+            if suggestionID != nil && !allDone { allDone = true }   // A shot with no steps is ready at once.
             return
         }
+        let now = CACurrentMediaTime()
+        var measurements: [StepMeasurement] = []
 
-        var results: [StepResult] = []
         for i in steps.indices {
-            var result = StepEvaluator.evaluate(steps[i].check, context)
-            if states[i].manualDone { result.status = .pass }
-            results.append(result)
-            let hold = steps[i].hold ?? config.holdSeconds
-            switch result.status {
-            case .pass:
-                states[i].failingSince = nil
-                if states[i].passingSince == nil { states[i].passingSince = now }
-                if !states[i].completed, let since = states[i].passingSince, now - since >= hold {
-                    states[i].completed = true
-                    if i == currentIndex() { celebrateStep() }
-                    if forcedIndex == i { forcedIndex = nil }
-                }
-            case .fail, .unknown:
-                states[i].passingSince = nil
-                if states[i].completed {
-                    if states[i].failingSince == nil { states[i].failingSince = now }
-                    if let since = states[i].failingSince, now - since >= config.undoGraceSeconds {
-                        states[i].completed = false   // Quietly go back to it.
+            let step = steps[i]
+            let m = StepEvaluator.measure(step.check, context, angleMargin: config.undoMinMargin)
+            measurements.append(m)
+            if m.isManual || states[i].skipped { continue }
+
+            // Smooth (moving average). Unmeasurable → keep the last value but don't advance.
+            if let v = m.value {
+                states[i].smoothed = states[i].smoothed.map { $0 * (1 - config.smoothing) + v * config.smoothing } ?? v
+            }
+            guard let value = states[i].smoothed, m.value != nil || states[i].latched else {
+                states[i].insideSince = nil
+                continue
+            }
+
+            let (wideLow, wideHigh) = wideBand(step.check, m)
+            let insideTight = value >= m.low && value <= m.high
+            let outsideWide = value < wideLow || value > wideHigh
+
+            if !states[i].latched {
+                if insideTight {
+                    if states[i].insideSince == nil { states[i].insideSince = now }
+                    if let since = states[i].insideSince, now - since >= (step.hold ?? config.holdSeconds) {
+                        states[i].latched = true
+                        states[i].outsideSince = nil
+                        if i == currentIndex() || forcedIndex == i { celebrate() }
+                        if forcedIndex == i { forcedIndex = nil }
                     }
+                } else {
+                    states[i].insideSince = nil
+                }
+            } else {
+                // Latched: only undo after clearly leaving the wide band for a while.
+                if outsideWide {
+                    if states[i].outsideSince == nil { states[i].outsideSince = now }
+                    if let since = states[i].outsideSince, now - since >= (step.check.undoSeconds ?? config.undoSeconds) {
+                        states[i].latched = false
+                        states[i].insideSince = nil
+                        Log.info("Step \(step.id) undone (\(format(value, m)) outside \(format(wideLow, m))…\(format(wideHigh, m)))")
+                    }
+                } else {
+                    states[i].outsideSince = nil
                 }
             }
         }
@@ -85,20 +121,25 @@ final class StepGuide: ObservableObject {
 
         if let i = index {
             let step = steps[i]
-            let chosen: ArrowType? = step.arrow == .auto ? results[i].arrow : step.arrow
-            let arrow: ArrowType = chosen ?? ArrowType.none
-            let newDisplay = Display(text: step.text(for: chosen),
-                                     arrow: arrow, index: i, isManual: step.check.type == "manual")
+            let m = measurements[i]
+            var chosen: ArrowType? = step.arrow
+            if step.arrow == .auto, let v = states[i].smoothed {
+                chosen = v < m.low ? m.lowArrow : (v > m.high ? m.highArrow : nil)
+            } else if step.arrow == .auto {
+                chosen = nil
+            }
+            let newDisplay = Display(text: step.text(for: chosen), arrow: chosen ?? ArrowType.none, index: i,
+                                     isManual: m.isManual)
             if newDisplay != display { display = newDisplay }
-            debugText = "\(i + 1)/\(steps.count) \(step.id): \(results[i].detail)"
+            debugText = liveText(i, m)
         } else {
             if display != nil { display = nil }
-            debugText = "all done"
+            debugText = "all \(steps.count) steps latched"
         }
 
         let newDots: [DotState] = steps.indices.map { i in
             if i == index { return .current }
-            if states[i].completed { return .done }
+            if states[i].latched { return .done }
             if states[i].skipped { return .skipped }
             return .todo
         }
@@ -119,39 +160,57 @@ final class StepGuide: ObservableObject {
         let current = currentIndex() ?? steps.count
         guard current > 0 else { return }
         let previous = current - 1
-        states[previous].skipped = false
-        states[previous].completed = false
-        states[previous].manualDone = false
-        states[previous].passingSince = nil
+        states[previous] = StepState()
         forcedIndex = previous
     }
 
     /// For steps only you can confirm ("Eyes on the lens"): tap ✓.
     func confirmManual() {
         guard let i = currentIndex() else { return }
-        states[i].manualDone = true
+        states[i].latched = true
+        celebrate()
     }
 
     // MARK: - Internals
 
-    private func load(_ rule: Playbook.Rule?) {
-        ruleID = rule?.id
-        steps = rule.map { Playbook.shared.steps(for: $0) } ?? []
-        states = steps.map { _ in State() }
-        forcedIndex = nil
-        allDone = false
-        if let rule { Log.info("Guide: \(rule.id) with \(steps.count) steps") }
+    /// The wide band: the playbook's undoMin/undoMax, or the tight band widened.
+    private func wideBand(_ check: StepCheck, _ m: StepMeasurement) -> (Double, Double) {
+        // One-sided bands (e.g. "head in frame": only a minimum) use the margin alone.
+        let bounded = abs(m.low) < 1e12 && abs(m.high) < 1e12
+        let width = bounded ? m.high - m.low : 0
+        let widen = max(width * config.undoWiden, m.minMargin)
+        let low = check.undoMin ?? (abs(m.low) < 1e12 ? m.low - widen : m.low)
+        let high = check.undoMax ?? (abs(m.high) < 1e12 ? m.high + widen : m.high)
+        return (low, high)
     }
 
-    /// First step that isn't done or skipped (or the one you swiped back to).
     private func currentIndex() -> Int? {
-        if let forced = forcedIndex, forced < steps.count, !states[forced].completed { return forced }
-        return states.indices.first { !states[$0].completed && !states[$0].skipped }
+        if let forced = forcedIndex, forced < steps.count, !states[forced].latched { return forced }
+        return states.indices.first { !states[$0].latched && !states[$0].skipped }
     }
 
-    private func celebrateStep() {
+    private func celebrate() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         justCompleted = true
         DispatchQueue.main.asyncAfter(deadline: .now() + config.checkMarkSeconds) { self.justCompleted = false }
+    }
+
+    private func format(_ v: Double, _ m: StepMeasurement) -> String {
+        if abs(v) > 1e12 { return v > 0 ? "∞" : "-∞" }
+        return m.unit == "°" ? String(format: "%.1f°", v) : String(format: "%.3f", v)
+    }
+
+    /// e.g. "2/4 fortyFive: 41.2° (raw 43.0°) done 37.0°…53.0° · undo 30.0°…60.0° · hold 0.2/0.4s"
+    private func liveText(_ i: Int, _ m: StepMeasurement) -> String {
+        let step = steps[i]
+        if m.isManual { return "\(i + 1)/\(steps.count) \(step.id): tap ✓" }
+        guard let smoothed = states[i].smoothed else { return "\(i + 1)/\(steps.count) \(step.id): no reading" }
+        let (wl, wh) = wideBand(step.check, m)
+        let raw = m.value.map { format($0, m) } ?? "—"
+        var hold = ""
+        if let since = states[i].insideSince {
+            hold = String(format: " · hold %.1f/%.1fs", CACurrentMediaTime() - since, step.hold ?? config.holdSeconds)
+        }
+        return "\(i + 1)/\(steps.count) \(step.id): \(format(smoothed, m)) (raw \(raw)) done \(format(m.low, m))…\(format(m.high, m)) · undo \(format(wl, m))…\(format(wh, m))\(hold)"
     }
 }

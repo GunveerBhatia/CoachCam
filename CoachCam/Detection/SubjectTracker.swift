@@ -43,6 +43,11 @@ final class SubjectTracker: ObservableObject {
 
     func clear() { subject = nil }
 
+    /// Locks onto a subject chosen by the stage machine (the main person/object at lock time).
+    func lock(kind: Kind, box: CGRect, at time: TimeInterval) {
+        subject = Subject(kind: kind, box: box, lastSeen: time)
+    }
+
     /// Follows the subject into the new analysis.
     func update(with analysis: SceneAnalysis) {
         guard var current = subject else { return }

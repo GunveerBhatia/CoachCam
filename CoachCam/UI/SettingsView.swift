@@ -13,7 +13,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
     @AppStorage(SettingsKey.showGrid) private var showGrid = true
     @AppStorage(SettingsKey.showLevel) private var showLevel = true
-    @AppStorage(SettingsKey.showPersonLabels) private var showPersonLabels = true
+    @AppStorage(StageMachine.autoStartKey) private var autoStartGuidance = true
 
     @State private var apiKeyInput = ""
     @State private var maskedKey = KeychainStore.maskedKey
@@ -22,20 +22,24 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Guides") {
+                Section {
+                    Toggle("Auto-start guidance", isOn: $autoStartGuidance)
                     Toggle("Rule-of-thirds grid", isOn: $showGrid)
                     Toggle("Level line", isOn: $showLevel)
+                } header: {
+                    Text("Guidance")
+                } footer: {
+                    Text("Auto-start: when a subject locks, the best suggestion starts guiding after a moment unless you tap another card.")
                 }
 
                 Section {
-                    Toggle("Show person labels", isOn: $showPersonLabels)
                     LabeledContent("Your corrections", value: "\(corrections.entries.count)")
                     Button("Reset person-type corrections", role: .destructive) { confirmResetCorrections = true }
                         .disabled(corrections.entries.isEmpty)
                 } header: {
                     Text("People")
                 } footer: {
-                    Text("Labels (kid, teen, man, woman, older man, older woman) are estimated on this phone and only used to pick poses and camera height. Tap a label to fix it. Corrections stay on this phone.")
+                    Text("Person types (kid, teen, man, woman, older man, older woman) are estimated on this phone and only used to pick poses and camera height. Fix one from the subject label at the top left. Corrections stay on this phone.")
                 }
 
                 Section {

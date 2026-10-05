@@ -8,8 +8,9 @@ struct DebugOverlay: View {
     @ObservedObject var motion: MotionService
     @ObservedObject var analyzer: SceneAnalyzer
     @ObservedObject var live: LiveDescription
-    @ObservedObject var ranker: SuggestionRanker
+    @ObservedObject var stage: StageMachine
     @ObservedObject var guide: StepGuide
+    @ObservedObject var autoSettings: AutoSettingsEngine
 
     var body: some View {
         let a = analyzer.latest
@@ -17,7 +18,16 @@ struct DebugOverlay: View {
         VStack(alignment: .leading, spacing: 2) {
             row("Subject", "\(d.category.title) ← \(d.proposed.title): \(d.reason)")
             if !d.checks.isEmpty { row("Checks", d.checks.joined(separator: " · ")) }
-            row("Shot", (ranker.selected.map { "\($0.id) (picked)" } ?? "—") + " · top: " + ranker.ranked.prefix(3).map { "\($0.id) \($0.why)" }.joined(separator: "; "))
+            row("Stage", stage.stage.rawValue + (stage.history.last.map { " · " + $0 } ?? ""))
+            ForEach(Array(stage.history.dropLast().reversed().enumerated()), id: \.offset) { _, line in
+                row("", line)
+            }
+            row("Shot", (stage.active.map { "\($0.id)" } ?? "—") + " · cards: " +
+                stage.cards.prefix(4).map { "\($0.id) \($0.why)" }.joined(separator: "; "))
+            row("Auto", autoSettings.badges.isEmpty ? "—" : autoSettings.badges.map(\.text).joined(separator: " · "))
+            if !Playbook.validationWarnings.isEmpty {
+                row("Playbook", "\(Playbook.validationWarnings.count) warnings: " + Playbook.validationWarnings.prefix(2).joined(separator: "; "))
+            }
             row("Step", guide.debugText)
             row("People", peopleText(a, d))
             row("Objects", a.objects.isEmpty ? "none" :

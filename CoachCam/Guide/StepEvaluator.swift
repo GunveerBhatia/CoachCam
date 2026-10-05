@@ -1,168 +1,181 @@
 import CoreGraphics
 import Foundation
 
-/// The result of checking one step against the live camera.
-struct StepResult {
-    enum Status { case pass, fail, unknown }
-    var status: Status
-    /// Which way to go when failing (used when the step's arrow is "auto").
-    var arrow: ArrowType?
-    /// The measured value, for the debug overlay (helps tune the numbers).
-    var detail: String
+/// What one check measures right now. The step engine smooths `value`, then compares it with
+/// the tight band (to complete) and the wide band (to undo).
+struct StepMeasurement {
+    /// nil = can't be measured right now (e.g. no face visible).
+    var value: Double?
+    /// The tight band: the step completes while the value stays inside it.
+    var low: Double
+    var high: Double
+    /// Arrows when the value is below / above the band.
+    var lowArrow: ArrowType?
+    var highArrow: ArrowType?
+    /// Smallest widening for the undo band (degrees for angles, fractions for positions).
+    var minMargin: Double
+    var unit: String = ""
+    var isManual = false
+
+    static func unavailable(_ low: Double = 0, _ high: Double = 1) -> StepMeasurement {
+        StepMeasurement(value: nil, low: low, high: high, minMargin: 0)
+    }
 }
 
-/// Everything a check can look at, gathered once per analysis.
+/// Everything a check can look at, gathered once per analysis. Motion values are already
+/// smoothed by MotionService.
 struct StepContext {
     var description: SceneDescription
     var analysis: SceneAnalysis
     var levelError: Double
     var cameraPitch: Double
     var shake: Double
-    /// The main person (tapped one first), and the main subject box (person or object).
+    /// The locked person (if the subject is a person) and the locked subject box.
     var person: PersonInfo?
     var subjectBox: CGRect?
 }
 
 /// Implements every check type the playbook can use. Positions are upright frame
 /// coordinates (0–1, top-left origin). Pitch: + = phone pointing down.
+/// The playbook's `min`/`max` set the tight band (defaults below); `undoMin`/`undoMax`
+/// set the wide band.
 enum StepEvaluator {
-    static func evaluate(_ check: StepCheck, _ c: StepContext) -> StepResult {
-        let lo = check.min, hi = check.max
-
-        /// Pass if v is within [lo, hi]; otherwise return the arrow for "too low" / "too high".
-        func range(_ v: Double, low: ArrowType?, high: ArrowType?, format: String = "%.2f") -> StepResult {
-            let text = String(format: format, v)
-            if let lo, v < lo { return StepResult(status: .fail, arrow: low, detail: text) }
-            if let hi, v > hi { return StepResult(status: .fail, arrow: high, detail: text) }
-            return StepResult(status: .pass, arrow: nil, detail: text)
+    static func measure(_ check: StepCheck, _ c: StepContext, angleMargin: Double) -> StepMeasurement {
+        let inf = Double.greatestFiniteMagnitude
+        func band(_ defLow: Double, _ defHigh: Double) -> (Double, Double) {
+            (check.min ?? defLow, check.max ?? defHigh)
         }
-        let unknown = StepResult(status: .unknown, arrow: nil, detail: "—")
+        /// Good/bad checks become 1/0 so they can be smoothed like numbers.
+        func boolean(_ good: Bool?, bad: ArrowType?) -> StepMeasurement {
+            StepMeasurement(value: good.map { $0 ? 1 : 0 }, low: 0.7, high: inf, lowArrow: bad, highArrow: nil, minMargin: 0.4)
+        }
 
         switch check.type {
         case "level":
             // levelError > 0 → phone turned clockwise → rotate it back counterclockwise.
-            let limit = hi ?? 1.5
-            let v = c.levelError
-            if abs(v) <= limit { return StepResult(status: .pass, arrow: nil, detail: String(format: "%+.1f°", v)) }
-            return StepResult(status: .fail, arrow: v > 0 ? .rotateCounterclockwise : .rotateClockwise,
-                              detail: String(format: "%+.1f°", v))
+            let limit = check.max ?? 1.5
+            return StepMeasurement(value: c.levelError, low: -limit, high: limit, lowArrow: .rotateClockwise,
+                                   highArrow: .rotateCounterclockwise, minMargin: angleMargin, unit: "°")
 
         case "pitch":
             // Too low a value → not pointing down enough → tilt down.
-            return range(c.cameraPitch, low: .tiltDown, high: .tiltUp, format: "%+.0f°")
+            let (lo, hi) = band(-4, 4)
+            return StepMeasurement(value: c.cameraPitch, low: lo, high: hi, lowArrow: .tiltDown, highArrow: .tiltUp,
+                                   minMargin: angleMargin, unit: "°")
 
         case "eyeLevel":
             // With the phone level, eyes high in the frame mean the camera is below eye level.
-            guard let face = c.person?.faceBox else { return unknown }
-            return range(Double(face.midY), low: .raisePhone, high: .lowerPhone)
+            let (lo, hi) = band(0.25, 0.42)
+            return StepMeasurement(value: c.person?.faceBox.map { Double($0.midY) }, low: lo, high: hi,
+                                   lowArrow: .raisePhone, highArrow: .lowerPhone, minMargin: 0.04)
 
         case "subjectSize":
-            let measure = check.measure ?? "height"
             var v: Double?
-            switch measure {
-            case "faceArea": v = c.person.map { $0.faceArea }
+            switch check.measure ?? "height" {
+            case "faceArea": v = c.person.flatMap { $0.faceBox != nil ? $0.faceArea : nil }
             case "area": v = c.subjectBox.map { Double($0.area) }
             default: v = (c.person?.box ?? c.subjectBox).map { Double($0.height) }
             }
-            guard let v else { return unknown }
-            return range(v, low: .stepCloser, high: .stepBack)
+            let (lo, hi) = band(0, inf)
+            return StepMeasurement(value: v, low: lo, high: hi, lowArrow: .stepCloser, highArrow: .stepBack,
+                                   minMargin: 0.01)
 
         case "headroom":
             // Too little space above the head → tilt up; too much → tilt down.
-            guard let top = c.person?.headTopY else { return unknown }
-            return range(Double(top), low: .tiltUp, high: .tiltDown)
+            let (lo, hi) = band(0.03, 0.15)
+            return StepMeasurement(value: c.person?.headTopY.map { Double($0) }, low: lo, high: hi,
+                                   lowArrow: .tiltUp, highArrow: .tiltDown, minMargin: 0.03)
 
         case "headInFrame":
-            guard let top = c.person?.headTopY else { return unknown }
-            return range(Double(top), low: .stepBack, high: nil)
+            let (lo, _) = band(0.01, inf)
+            return StepMeasurement(value: c.person?.headTopY.map { Double($0) }, low: lo, high: inf,
+                                   lowArrow: .stepBack, highArrow: nil, minMargin: 0.02)
 
         case "fullBody":
-            guard let person = c.person else { return unknown }
-            let headOK = (person.headTopY ?? 0) >= (lo ?? 0.01)
-            if person.fullBodyVisible && headOK { return StepResult(status: .pass, arrow: nil, detail: "head+feet") }
-            return StepResult(status: .fail, arrow: .stepBack, detail: person.fullBodyVisible ? "head cut" : "feet cut")
+            guard let p = c.person else { return .unavailable() }
+            return boolean(p.fullBodyVisible && (p.headTopY ?? 0) >= (check.min ?? 0.01), bad: .stepBack)
 
         case "placement":
-            guard let box = c.person?.box ?? c.subjectBox else { return unknown }
-            // Mirror for the front camera, so left/right match what you see on screen.
+            guard let box = c.person?.box ?? c.subjectBox else { return .unavailable() }
+            // Mirror for the front camera so left/right match what you see.
             var x = Double(box.midX)
             if c.description.isFrontCamera { x = 1 - x }
             let targets: [Double] = check.target == "center" ? [0.5] : [1.0 / 3, 2.0 / 3]
             let target = targets.min { abs($0 - x) < abs($1 - x) } ?? 0.5
-            let tolerance = hi ?? 0.07
-            let text = String(format: "x %.2f → %.2f", x, target)
-            if abs(x - target) <= tolerance { return StepResult(status: .pass, arrow: nil, detail: text) }
+            let tolerance = check.max ?? 0.07
             // Subject left of where it should be → move the phone left (the subject shifts right).
-            return StepResult(status: .fail, arrow: x < target ? .moveLeft : .moveRight, detail: text)
+            return StepMeasurement(value: x - target, low: -tolerance, high: tolerance, lowArrow: .moveLeft,
+                                   highArrow: .moveRight, minMargin: 0.03)
 
         case "faceYaw":
-            guard let yaw = c.person?.faceYaw else { return unknown }
-            return range(yaw, low: .subjectTurnRight, high: .subjectTurnLeft, format: "%+.0f°")
+            let (lo, hi) = band(-12, 12)
+            return StepMeasurement(value: c.person?.faceYaw, low: lo, high: hi, lowArrow: .subjectTurnRight,
+                                   highArrow: .subjectTurnLeft, minMargin: angleMargin * 2, unit: "°")
 
         case "faceRoll":
-            guard let roll = c.person?.faceRoll else { return unknown }
-            let limit = hi ?? 6
-            let text = String(format: "%+.0f°", roll)
-            return abs(roll) <= limit ? StepResult(status: .pass, arrow: nil, detail: text)
-                : StepResult(status: .fail, arrow: .subjectStraightenHead, detail: text)
+            let limit = check.max ?? 6
+            return StepMeasurement(value: c.person?.faceRoll, low: -limit, high: limit, lowArrow: .subjectStraightenHead,
+                                   highArrow: .subjectStraightenHead, minMargin: angleMargin * 2, unit: "°")
 
         case "facePitch":
-            guard let pitch = c.person?.facePitch else { return unknown }
-            return range(pitch, low: .subjectChinUp, high: .subjectChinDown, format: "%+.0f°")
+            let (lo, hi) = band(-15, 5)
+            return StepMeasurement(value: c.person?.facePitch, low: lo, high: hi, lowArrow: .subjectChinUp,
+                                   highArrow: .subjectChinDown, minMargin: angleMargin * 2, unit: "°")
 
         case "bodyAngle":
             // Shoulder width ÷ shoulder-to-hip height shrinks as the body turns away.
-            guard let p = c.person, let ls = p.joints["leftShoulder"], let rs = p.joints["rightShoulder"],
-                  let hip = p.joints["root"] ?? p.joints["leftHip"] ?? p.joints["rightHip"] else { return unknown }
-            let torso = Double(hip.y - (ls.y + rs.y) / 2)
-            guard torso > 0.02 else { return unknown }
-            let ratio = Double(abs(ls.x - rs.x)) / torso
-            // Too square to the camera (ratio too high) → turn the body.
-            return range(ratio, low: .subjectTurnRight, high: .subjectTurnLeft)
+            var ratio: Double?
+            if let p = c.person, let ls = p.joints["leftShoulder"], let rs = p.joints["rightShoulder"],
+               let hip = p.joints["root"] ?? p.joints["leftHip"] ?? p.joints["rightHip"] {
+                let torso = Double(hip.y - (ls.y + rs.y) / 2)
+                if torso > 0.02 { ratio = Double(abs(ls.x - rs.x)) / torso }
+            }
+            let (lo, hi) = band(0.35, 0.8)
+            return StepMeasurement(value: ratio, low: lo, high: hi, lowArrow: .subjectTurnRight,
+                                   highArrow: .subjectTurnLeft, minMargin: 0.08)
 
         case "noJointCrop":
-            // A knee/ankle/elbow/wrist sitting right on the bottom or side edge = awkward crop.
-            guard let p = c.person else { return unknown }
-            let margin = CGFloat(hi ?? 0.03)
+            guard let p = c.person else { return .unavailable() }
+            let margin = CGFloat(check.max ?? 0.03)
             let names = ["leftKnee", "rightKnee", "leftAnkle", "rightAnkle", "leftWrist", "rightWrist", "leftElbow", "rightElbow"]
             let cut = names.compactMap { p.joints[$0] }.contains { $0.y > 1 - margin || $0.x < margin || $0.x > 1 - margin }
-            return cut ? StepResult(status: .fail, arrow: .stepBack, detail: "joint at edge")
-                : StepResult(status: .pass, arrow: nil, detail: "ok")
+            return boolean(!cut, bad: .stepBack)
 
         case "gap":
             let people = c.analysis.people
-            guard people.count >= 2 else { return unknown }
+            guard people.count >= 2 else { return .unavailable() }
             let a = people[0].box, b = people[1].box
             let gap = Double(max(0, max(a.minX, b.minX) - min(a.maxX, b.maxX)))
-            return range(gap, low: nil, high: .subjectCloseGap)
+            return StepMeasurement(value: gap, low: -inf, high: check.max ?? 0.02, lowArrow: nil,
+                                   highArrow: .subjectCloseGap, minMargin: 0.02)
 
         case "staggered":
             let tops = c.analysis.people.prefix(2).compactMap { $0.headTopY }
-            guard tops.count == 2 else { return unknown }
-            return range(Double(abs(tops[0] - tops[1])), low: .subjectStaggerHeads, high: nil)
+            guard tops.count == 2 else { return .unavailable() }
+            return StepMeasurement(value: Double(abs(tops[0] - tops[1])), low: check.min ?? 0.04, high: inf,
+                                   lowArrow: .subjectStaggerHeads, highArrow: nil, minMargin: 0.02)
 
         case "steady":
-            return range(c.shake, low: nil, high: ArrowType.none, format: "%.2f")
+            return StepMeasurement(value: c.shake, low: -inf, high: check.max ?? 0.08, lowArrow: nil,
+                                   highArrow: ArrowType.none, minMargin: 0.05)
 
         case "notBacklit":
-            return c.description.lighting.isBacklit ? StepResult(status: .fail, arrow: ArrowType.none, detail: "backlit")
-                : StepResult(status: .pass, arrow: nil, detail: "ok")
+            return boolean(!c.description.lighting.isBacklit, bad: ArrowType.none)
 
         case "notHarsh":
-            return c.description.lighting.isHarsh ? StepResult(status: .fail, arrow: ArrowType.none, detail: "harsh")
-                : StepResult(status: .pass, arrow: nil, detail: "ok")
+            return boolean(!c.description.lighting.isHarsh, bad: ArrowType.none)
 
         case "noFace":
-            // Back / faceless shots: a person is there but their face isn't visible.
-            guard let p = c.person else { return unknown }
-            return p.faceBox == nil ? StepResult(status: .pass, arrow: nil, detail: "no face")
-                : StepResult(status: .fail, arrow: .subjectTurnLeft, detail: "face visible")
+            guard let p = c.person else { return .unavailable() }
+            return boolean(p.faceBox == nil, bad: .subjectTurnLeft)
 
         case "manual":
-            return StepResult(status: .unknown, arrow: nil, detail: "tap ✓ when done")
+            var m = StepMeasurement.unavailable()
+            m.isManual = true
+            return m
 
         default:
-            return StepResult(status: .unknown, arrow: nil, detail: "unknown check \(check.type)")
+            return .unavailable()
         }
     }
 }

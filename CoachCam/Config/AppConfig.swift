@@ -79,9 +79,21 @@ struct AppConfig: Decodable {
     }
 
     struct Guide: Decodable {
+        var smoothing: Double
         var holdSeconds: Double
-        var undoGraceSeconds: Double
+        var undoSeconds: Double
+        var undoWiden: Double
+        var undoMinMargin: Double
         var checkMarkSeconds: Double
+        var maxSteps: Int
+    }
+
+    struct Stages: Decodable {
+        var lostSubjectSeconds: Double
+        var newSceneTurnDegrees: Double
+        var newSceneFrameChange: Double
+        var autoStartDelaySeconds: Double
+        var motionSmoothing: Double
     }
 
     struct People: Decodable {
@@ -112,6 +124,7 @@ struct AppConfig: Decodable {
     var naming: Naming
     var auto: Auto
     var guide: Guide
+    var stages: Stages
     var people: People
     var ai: AI
     var subject: Subject

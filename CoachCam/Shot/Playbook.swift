@@ -75,6 +75,37 @@ struct Playbook: Decodable {
         }
     }
 
+    /// Startup check: shots with too many steps, and steps that contradict each other within
+    /// one suggestion (two pitch steps that can't both pass; "phone level" while pointing
+    /// straight down, where left/right tilt is meaningless). Shown in the debug overlay.
+    static let validationWarnings: [String] = {
+        var warnings: [String] = []
+        let playbook = Playbook.shared
+        let maxSteps = AppConfig.shared.guide.maxSteps
+        for s in playbook.suggestions {
+            let steps = playbook.steps(for: s)
+            if steps.count > maxSteps { warnings.append("\(s.id): \(steps.count) steps (max \(maxSteps))") }
+            // Same check type with tight bands that don't overlap = impossible to satisfy both.
+            let banded = steps.filter { ["pitch", "eyeLevel", "headroom", "subjectSize"].contains($0.check.type) }
+            for (i, a) in banded.enumerated() {
+                for b in banded.dropFirst(i + 1) where a.check.type == b.check.type && a.check.measure == b.check.measure {
+                    let lo = max(a.check.min ?? -.greatestFiniteMagnitude, b.check.min ?? -.greatestFiniteMagnitude)
+                    let hi = min(a.check.max ?? .greatestFiniteMagnitude, b.check.max ?? .greatestFiniteMagnitude)
+                    if lo > hi { warnings.append("\(s.id): \(a.id) conflicts with \(b.id)") }
+                }
+            }
+            // "Level" (left/right tilt) can't be measured with the phone pointing straight down/up.
+            if steps.contains(where: { $0.check.type == "level" }),
+               let pitch = steps.first(where: { $0.check.type == "pitch" }),
+               abs(pitch.check.min ?? 0) > 60 || abs(pitch.check.max ?? 0) > 60 {
+                warnings.append("\(s.id): level step conflicts with \(pitch.id) (phone near flat)")
+            }
+        }
+        for w in warnings { Log.warn("Playbook check: \(w)") }
+        if warnings.isEmpty { Log.info("Playbook check: no conflicts") }
+        return warnings
+    }()
+
     static let shared: Playbook = {
         guard let url = Bundle.main.url(forResource: "playbook", withExtension: "json") else {
             LogStore.shared.writeNow("playbook.json is missing from the app bundle")
@@ -101,35 +132,18 @@ struct RankedSuggestion: Identifiable, Equatable {
     static func == (a: RankedSuggestion, b: RankedSuggestion) -> Bool { a.id == b.id }
 }
 
-/// Picks the 3–6 suggestions that fit what's detected, best first, and remembers your
-/// favourites (each tap on a card ranks it a bit higher next time, per subject).
-final class SuggestionRanker: ObservableObject {
-    /// Cards to show (published only when the list changes).
-    @Published private(set) var ranked: [RankedSuggestion] = []
-    /// The card you tapped (drives the walkthrough and lens), or nil.
-    @Published private(set) var selected: Playbook.Suggestion?
-
-    /// What the automatic settings follow: your card, otherwise the best fit.
-    var active: Playbook.Suggestion? { selected ?? ranked.first?.suggestion }
-
-    private var category: SubjectCategory?
+/// Ranks the suggestions that fit what's detected, best first (3–6 cards). Called ONCE per
+/// lock by the stage machine; the cards are then frozen. Your picks are remembered (per card)
+/// and rank higher next time.
+final class SuggestionRanker {
     private let favourites = SuggestionFavourites()
     private let maxCards = 6
 
-    func select(_ suggestion: Playbook.Suggestion?) {
-        selected = suggestion
-        if let suggestion {
-            favourites.record(suggestion.id)
-            Log.info("Suggestion: \(suggestion.title)")
-        }
+    func recordPick(_ id: String) {
+        favourites.record(id)
     }
 
-    /// Called after each analysis.
-    func update(category: SubjectCategory, tags: Set<String>) {
-        if category != self.category {
-            self.category = category
-            selected = nil   // New subject → pick again.
-        }
+    func rank(category: SubjectCategory, tags: Set<String>) -> [RankedSuggestion] {
         var list: [RankedSuggestion] = []
         for s in Playbook.shared.suggestions where s.category == category {
             let when = s.when
@@ -146,10 +160,9 @@ final class SuggestionRanker: ObservableObject {
             list.append(RankedSuggestion(suggestion: s, score: score, why: why))
         }
         list.sort { $0.score > $1.score }
-        let top = Array(list.prefix(maxCards))
-        if top.map(\.id) != ranked.map(\.id) { ranked = top }
+        Log.info("Cards for \(category.title): " + list.prefix(maxCards).map { "\($0.id) \($0.why)" }.joined(separator: "; "))
+        return Array(list.prefix(maxCards))
     }
-
     /// Turns the description into tags the playbook's "when"/"prefer" lists can use, e.g.
     /// people:2, prop:umbrella, light:backlit, time:evening, camera:front, framing:fullBody.
     static func sceneTags(description d: SceneDescription, analysis a: SceneAnalysis,
