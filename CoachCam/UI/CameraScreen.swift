@@ -21,6 +21,7 @@ struct CameraScreen: View {
     @State private var personTypes = PersonTypeTracker()
     @State private var objectNames = ObjectLabelTracker()
     @State private var autoSettings = AutoSettingsEngine()
+    @State private var guide = StepGuide()
     @StateObject private var identify = IdentifyController()
 
     @AppStorage(SettingsKey.showDebugOverlay) private var showDebugOverlay = false
@@ -95,6 +96,7 @@ struct CameraScreen: View {
         let personTypes = self.personTypes
         let objectNames = self.objectNames
         let autoSettings = self.autoSettings
+        let guide = self.guide
         let camera = self.camera
         let motion = self.motion
         camera.frameHandler = { sampleBuffer, info in
@@ -113,6 +115,12 @@ struct CameraScreen: View {
             autoSettings.update(rule: planner.current?.rule, photoType: photoType, description: description,
                                 analysis: analysis, camera: camera, iso: camera.stats.iso, shake: motion.shake,
                                 subjectBox: describer.subjects.subject?.box)
+            // M4: step-by-step guidance for the chosen rule.
+            let person = describer.subjects.lockedPerson(in: analysis) ?? analysis.people.first
+            let context = StepContext(description: description, analysis: analysis, levelError: motion.levelError,
+                                      cameraPitch: motion.cameraPitch, shake: motion.shake, person: person,
+                                      subjectBox: describer.subjects.subject?.box ?? person?.box ?? analysis.objects.first?.box)
+            guide.update(rule: planner.current?.rule, context: context)
         }
     }
 
@@ -142,6 +150,15 @@ struct CameraScreen: View {
                 if showPersonLabels { PersonLabelsOverlay(tracker: personTypes, camera: camera) }
                 ObjectLabelsOverlay(tracker: objectNames, camera: camera, analyzer: analyzer)
                 HoldStillOverlay(engine: autoSettings)
+                StepArrowOverlay(guide: guide, camera: camera, subjectBox: {
+                    let latest = analyzer.latest
+                    let person = describer.subjects.lockedPerson(in: latest) ?? latest.people.first
+                    return person?.faceBox ?? person?.box ?? describer.subjects.subject?.box ?? latest.objects.first?.box
+                })
+                VStack {
+                    CoachingPill(guide: guide).padding(.top, 8)
+                    Spacer()
+                }
                 if let point = focusPoint {
                     FocusIndicator(point: point).id(point.x + point.y * 10_000)
                 }
@@ -152,12 +169,13 @@ struct CameraScreen: View {
                     VStack {
                         HStack {
                             DebugOverlay(camera: camera, stats: camera.stats, motion: motion, analyzer: analyzer,
-                                         live: describer.live, planner: planner)
+                                         live: describer.live, planner: planner, guide: guide)
                             Spacer()
                         }
                         Spacer()
                     }
-                    .padding(6)
+                    .padding(.horizontal, 6)
+                    .padding(.top, 70)   // Below the coaching pill.
                 }
                 VStack {
                     Spacer()
@@ -280,7 +298,7 @@ struct CameraScreen: View {
             }
             .frame(maxWidth: .infinity)
 
-            ShutterButton(action: takePhoto)
+            GuidedShutterButton(guide: guide, action: takePhoto)
                 .frame(maxWidth: .infinity)
 
             Button { camera.flipCamera() } label: {
@@ -372,7 +390,18 @@ struct CameraScreen: View {
     }
 }
 
-/// The big round shutter. In M7 its ring turns green when the shot is ready.
+/// The shutter, with its ring turning green ("Take it") when every guide step is done.
+struct GuidedShutterButton: View {
+    @ObservedObject var guide: StepGuide
+    let action: () -> Void
+
+    var body: some View {
+        ShutterButton(action: action, ringColor: guide.allDone ? .green : .white)
+            .animation(.easeOut(duration: 0.2), value: guide.allDone)
+    }
+}
+
+/// The big round shutter.
 struct ShutterButton: View {
     let action: () -> Void
     var ringColor: Color = .white

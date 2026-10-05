@@ -96,6 +96,13 @@
     "sunsetKelvin": 5500
   },
 
+  "guide": {
+    "_readme": "Step-by-step guidance. A step counts as done after its check passes for holdSeconds (a step can override with 'hold'). A finished step that fails for undoGraceSeconds becomes the current step again. The ✓ shows for checkMarkSeconds.",
+    "holdSeconds": 0.4,
+    "undoGraceSeconds": 0.6,
+    "checkMarkSeconds": 0.6
+  },
+
   "people": {
     "_readme": "Person types (kid, teen, man, woman, older man, older woman) from the on-device model. Below personTypeMinConfidence the label is just 'person'. Smoothing: how much each new reading counts (0-1). A face gone this long is forgotten (with its correction).",
     "personTypeMinConfidence": 0.6,

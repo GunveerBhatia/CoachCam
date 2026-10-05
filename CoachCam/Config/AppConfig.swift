@@ -78,6 +78,12 @@ struct AppConfig: Decodable {
         var sunsetKelvin: Float
     }
 
+    struct Guide: Decodable {
+        var holdSeconds: Double
+        var undoGraceSeconds: Double
+        var checkMarkSeconds: Double
+    }
+
     struct People: Decodable {
         var personTypeMinConfidence: Double
         var personTypeSmoothing: Double
@@ -105,6 +111,7 @@ struct AppConfig: Decodable {
     var detection: Detection
     var naming: Naming
     var auto: Auto
+    var guide: Guide
     var people: People
     var ai: AI
     var subject: Subject

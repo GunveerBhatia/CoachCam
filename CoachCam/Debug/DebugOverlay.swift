@@ -9,6 +9,7 @@ struct DebugOverlay: View {
     @ObservedObject var analyzer: SceneAnalyzer
     @ObservedObject var live: LiveDescription
     @ObservedObject var planner: RulePlanner
+    @ObservedObject var guide: StepGuide
 
     var body: some View {
         let a = analyzer.latest
@@ -17,6 +18,7 @@ struct DebugOverlay: View {
             row("Subject", "\(d.category.title) ← \(d.proposed.title): \(d.reason)")
             if !d.checks.isEmpty { row("Checks", d.checks.joined(separator: " · ")) }
             row("Rule", planner.current.map { "\($0.rule.id) (\($0.why))" } ?? "—")
+            row("Step", guide.debugText)
             row("People", peopleText(a, d))
             row("Objects", a.objects.isEmpty ? "none" :
                 a.objects.prefix(4).map { "\($0.label) \(Int($0.confidence * 100))%" }.joined(separator: ", "))

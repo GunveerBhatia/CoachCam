@@ -1,6 +1,46 @@
 {
   "_readme": "Coaching rules = detection + photo type. Built from docs/SPEC.md. Each rule: category (people/building/food/sky/object/general), optional photoType, optional match {people: 1|2|3|4+, camera: front|back, props: [...], personTypes: [...]}. The app picks the exact match or the closest one and shows which in the debug overlay. Keep tips under ~8 words. pitch: + = phone pointing down, - = pointing up.",
-  "version": 1,
+  "version": 2,
+
+  "stepLibrary": {
+    "level":          { "id": "level", "text": "Straighten your phone", "arrow": "auto", "check": { "type": "level", "max": 1.5 } },
+    "pitchLevel":     { "id": "pitchLevel", "text": "Keep phone level", "textFor": { "tiltDown": "Tilt phone down to level", "tiltUp": "Tilt phone up to level" }, "arrow": "auto", "check": { "type": "pitch", "min": -4, "max": 4 } },
+    "steady":         { "id": "steady", "text": "Hold still", "arrow": "none", "check": { "type": "steady", "max": 0.08 } },
+    "eyeLevel":       { "id": "eyeLevel", "text": "Camera at eye level", "textFor": { "raisePhone": "You: raise phone to eye level", "lowerPhone": "You: lower phone to eye level" }, "arrow": "auto", "check": { "type": "eyeLevel", "min": 0.25, "max": 0.42 } },
+    "slightlyAbove":  { "id": "slightlyAbove", "text": "Camera slightly above eyes", "textFor": { "raisePhone": "You: raise phone a little", "lowerPhone": "You: lower phone a little" }, "arrow": "auto", "check": { "type": "eyeLevel", "min": 0.36, "max": 0.55 } },
+    "headInFrame":    { "id": "headInFrame", "text": "Step back, head is cut off", "arrow": "stepBack", "check": { "type": "headInFrame", "min": 0.01 } },
+    "headroom":       { "id": "headroom", "text": "Fix space above the head", "textFor": { "tiltUp": "Tilt up, leave room above head", "tiltDown": "Tilt down, too much empty space" }, "arrow": "auto", "check": { "type": "headroom", "min": 0.03, "max": 0.15 } },
+    "headshotSize":   { "id": "headshotSize", "text": "Frame head and shoulders", "textFor": { "stepCloser": "You: step closer", "stepBack": "You: step back a little" }, "arrow": "auto", "check": { "type": "subjectSize", "measure": "faceArea", "min": 0.05, "max": 0.2 } },
+    "halfBodySize":   { "id": "halfBodySize", "text": "Frame from the waist up", "textFor": { "stepCloser": "You: step closer", "stepBack": "You: step back" }, "arrow": "auto", "check": { "type": "subjectSize", "measure": "faceArea", "min": 0.015, "max": 0.05 } },
+    "fullBody":       { "id": "fullBody", "text": "Fit them head to toe", "arrow": "stepBack", "check": { "type": "fullBody", "min": 0.02 } },
+    "noJointCrop":    { "id": "noJointCrop", "text": "Don't crop at knees or ankles", "textFor": { "stepBack": "Step back, don't cut at joints" }, "arrow": "auto", "check": { "type": "noJointCrop", "max": 0.03 } },
+    "thirds":         { "id": "thirds", "text": "Put them on a third line", "textFor": { "moveLeft": "Move phone left a little", "moveRight": "Move phone right a little" }, "arrow": "auto", "check": { "type": "placement", "target": "thirds", "max": 0.07 } },
+    "center":         { "id": "center", "text": "Center the subject", "textFor": { "moveLeft": "Move phone left a little", "moveRight": "Move phone right a little" }, "arrow": "auto", "check": { "type": "placement", "target": "center", "max": 0.06 } },
+    "bodyAngled":     { "id": "bodyAngled", "text": "Angle body 30–45° away", "textFor": { "subjectTurnLeft": "Turn your body a little", "subjectTurnRight": "Turn back toward camera a bit" }, "arrow": "auto", "check": { "type": "bodyAngle", "min": 0.35, "max": 0.8 } },
+    "faceToLens":     { "id": "faceToLens", "text": "Turn your face to the lens", "textFor": { "subjectTurnLeft": "Turn your head to the lens", "subjectTurnRight": "Turn your head to the lens" }, "arrow": "auto", "check": { "type": "faceYaw", "min": -12, "max": 12 } },
+    "headStraight":   { "id": "headStraight", "text": "Keep your head straight", "arrow": "subjectStraightenHead", "check": { "type": "faceRoll", "max": 6 } },
+    "chinDown":       { "id": "chinDown", "text": "Chin forward and slightly down", "arrow": "subjectChinDown", "check": { "type": "manual" } },
+    "shouldersDown":  { "id": "shouldersDown", "text": "Drop and relax your shoulders", "arrow": "none", "check": { "type": "manual" } },
+    "eyesToLens":     { "id": "eyesToLens", "text": "Eyes on the lens, not the screen", "arrow": "subjectFaceLens", "check": { "type": "manual" } },
+    "weightOneLeg":   { "id": "weightOneLeg", "text": "Weight on one leg, knee bent", "arrow": "none", "check": { "type": "manual" } },
+    "closeGap":       { "id": "closeGap", "text": "Close the gap, shoulders touching", "arrow": "subjectCloseGap", "check": { "type": "gap", "max": 0.02 } },
+    "staggerHeads":   { "id": "staggerHeads", "text": "Heads at different heights", "arrow": "subjectStaggerHeads", "check": { "type": "staggered", "min": 0.04 } },
+    "notBacklit":     { "id": "notBacklit", "text": "Light is behind you, turn around", "arrow": "none", "check": { "type": "notBacklit" } },
+    "notHarsh":       { "id": "notHarsh", "text": "Move into open shade", "arrow": "none", "check": { "type": "notHarsh" } },
+    "overhead":       { "id": "overhead", "text": "Raise to overhead", "textFor": { "tiltDown": "Point phone straight down", "tiltUp": "Ease back, too far over" }, "arrow": "auto", "check": { "type": "pitch", "min": 80, "max": 95 } },
+    "fortyFive":      { "id": "fortyFive", "text": "Hold phone at about 45°", "textFor": { "tiltDown": "Tilt down to 45°", "tiltUp": "Lower to 45°" }, "arrow": "auto", "check": { "type": "pitch", "min": 35, "max": 55 } },
+    "straightOn":     { "id": "straightOn", "text": "Shoot straight on, food level", "textFor": { "tiltDown": "Tilt down a little", "tiltUp": "Lower phone to food level" }, "arrow": "auto", "check": { "type": "pitch", "min": -5, "max": 15 } },
+    "lowAngle":       { "id": "lowAngle", "text": "Crouch low, point up", "textFor": { "tiltUp": "Point phone up more", "tiltDown": "Not so steep" }, "arrow": "auto", "check": { "type": "pitch", "min": -70, "max": -25 } },
+    "objectSize":     { "id": "objectSize", "text": "Fill the frame with it", "textFor": { "stepCloser": "Move closer", "stepBack": "Back up a little" }, "arrow": "auto", "check": { "type": "subjectSize", "measure": "area", "min": 0.08, "max": 0.6 } },
+    "wipeRim":        { "id": "wipeRim", "text": "Wipe the plate rim", "arrow": "none", "check": { "type": "manual" } },
+    "sideLight":      { "id": "sideLight", "text": "Light from the side, not front", "arrow": "none", "check": { "type": "manual" } },
+    "horizonThird":   { "id": "horizonThird", "text": "Horizon on a third line", "arrow": "none", "check": { "type": "manual" } },
+    "foreground":     { "id": "foreground", "text": "Add something in the foreground", "arrow": "none", "check": { "type": "manual" } },
+    "mirrorDistance": { "id": "mirrorDistance", "text": "Stand 4–5 ft from the mirror", "arrow": "none", "check": { "type": "manual" } },
+    "phoneChest":     { "id": "phoneChest", "text": "Phone at chest height", "arrow": "none", "check": { "type": "manual" } },
+    "phoneAside":     { "id": "phoneAside", "text": "Hold phone slightly to the side", "arrow": "none", "check": { "type": "manual" } },
+    "selfieAbove":    { "id": "selfieAbove", "text": "Phone slightly above eye level", "textFor": { "tiltDown": "Tilt phone down a little", "tiltUp": "Tilt phone up a little" }, "arrow": "auto", "check": { "type": "pitch", "min": -20, "max": -2 } }
+  },
 
   "rules": [
     {
@@ -13,7 +53,8 @@
       "lighting": ["Face toward soft light", "Avoid overhead midday sun"],
       "pose": ["Angle your body 30–45° away", "Turn your head back to the lens", "Chin forward and slightly down", "Drop your shoulders", "Lean slightly toward the lens", "Tilt head 5° at most", "Eyes on the lens, not the screen"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "lowLight": "quality", "shutter": "normal", "whiteBalance": "skin", "depth": true },
-      "source": "SPEC: Headshot / pro; Lens choice"
+      "source": "SPEC: Headshot / pro; Lens choice",
+      "steps": ["level","eyeLevel","headshotSize","headroom","thirds","bodyAngled","faceToLens","chinDown","shouldersDown","headStraight","eyesToLens","steady"]
     },
     {
       "id": "people.headshot.front",
@@ -25,7 +66,8 @@
       "lighting": ["Turn toward the light"],
       "pose": ["Chin forward and slightly down", "Turn your face toward the light", "Relax your shoulders", "Eyes on the lens"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Front selfie"
+      "source": "SPEC: Front selfie",
+      "steps": ["selfieAbove","headroom","faceToLens","chinDown","headStraight","eyesToLens"]
     },
     {
       "id": "people.pro",
@@ -37,7 +79,8 @@
       "lighting": ["Soft, even light on the face", "Plain wall or office background"],
       "pose": ["Angle your body 30–45° away", "Turn your head back to the lens", "Chin forward and slightly down", "Shoulders down and relaxed", "Small lean toward the lens", "Eyes on the lens"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin", "depth": true },
-      "source": "SPEC: Headshot / pro"
+      "source": "SPEC: Headshot / pro",
+      "steps": ["level","eyeLevel","headshotSize","headroom","center","bodyAngled","faceToLens","chinDown","shouldersDown","eyesToLens","steady"]
     },
     {
       "id": "people.portrait",
@@ -49,7 +92,8 @@
       "lighting": ["Soft light from the side or front"],
       "pose": ["Angle your body slightly away", "Weight on your back leg", "Turn your face to the lens", "Relax your hands"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin", "depth": true },
-      "source": "SPEC: General; Headshot / pro"
+      "source": "SPEC: General; Headshot / pro",
+      "steps": ["level","eyeLevel","halfBodySize","headroom","thirds","noJointCrop","bodyAngled","faceToLens","steady"]
     },
     {
       "id": "people.casual",
@@ -61,7 +105,8 @@
       "lighting": ["Open shade is best", "Avoid harsh overhead sun"],
       "pose": ["Relax, weight on one leg", "Hands in pockets or holding something", "Look off to the side, then to the lens", "Small natural smile"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: General; Poses (Casual vibe)"
+      "source": "SPEC: General; Poses (Casual vibe)",
+      "steps": ["level","headInFrame","headroom","thirds","noJointCrop","weightOneLeg","steady"]
     },
     {
       "id": "people.street",
@@ -73,7 +118,8 @@
       "lighting": ["Side light shows texture", "Watch for harsh shadows on the face"],
       "pose": ["Walk slowly toward the camera", "Look away from the lens", "One hand in a pocket", "Keep your shoulders loose"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "shutter": "fast", "whiteBalance": "auto" },
-      "source": "SPEC: General; Poses (Street vibe)"
+      "source": "SPEC: General; Poses (Street vibe)",
+      "steps": ["level","pitchLevel","headInFrame","thirds","noJointCrop","steady"]
     },
     {
       "id": "people.fullBody",
@@ -85,7 +131,8 @@
       "lighting": ["Even light head to toe", "Open shade in bright sun"],
       "pose": ["Weight on one leg", "Bend the other knee slightly", "One foot slightly forward", "Angle your body a little", "Arms relaxed, not pressed to your sides"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Lens choice; General"
+      "source": "SPEC: Lens choice; General",
+      "steps": ["level","pitchLevel","fullBody","headroom","thirds","weightOneLeg","steady"]
     },
     {
       "id": "people.mirrorFit",
@@ -97,7 +144,8 @@
       "lighting": ["Light facing you, not behind you"],
       "pose": ["Stand 4–5 ft from the mirror", "Phone at chest height", "Angle your body about 30°", "Hold the phone slightly to the side", "Weight on one leg", "Bend the other knee slightly", "One foot slightly forward"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Mirror fit"
+      "source": "SPEC: Mirror fit",
+      "steps": ["mirrorDistance","phoneChest","level","fullBody","bodyAngled","phoneAside","weightOneLeg"]
     },
     {
       "id": "people.selfie",
@@ -109,7 +157,8 @@
       "lighting": ["Turn toward the light"],
       "pose": ["Chin forward and slightly down", "Turn toward the light", "Relax your shoulders"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Front selfie"
+      "source": "SPEC: Front selfie",
+      "steps": ["selfieAbove","headroom","faceToLens","chinDown","notBacklit"]
     },
     {
       "id": "people.solo",
@@ -121,7 +170,8 @@
       "lighting": ["Face toward soft light"],
       "pose": ["Angle your body a little", "Weight on one leg", "Chin slightly down"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: General"
+      "source": "SPEC: General",
+      "steps": ["level","headInFrame","headroom","thirds","noJointCrop","steady"]
     },
     {
       "id": "people.kid",
@@ -133,7 +183,8 @@
       "lighting": ["Open shade, soft light"],
       "pose": ["Crouch to their eye level", "Let them play or hold a toy", "Shoot bursts; kids move fast"],
       "autoSettings": { "exposure": "face", "shutter": "fast", "whiteBalance": "skin" },
-      "source": "Person types (camera height for kids)"
+      "source": "Person types (camera height for kids)",
+      "steps": ["level","eyeLevel","headInFrame","thirds","steady"]
     },
     {
       "id": "people.duo",
@@ -145,7 +196,8 @@
       "lighting": ["Both faces in the same light"],
       "pose": ["Angle bodies 45° toward each other", "Heads at different heights", "Front person: half-step forward", "Shoulders touching, lean in"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Duo / group"
+      "source": "SPEC: Duo / group",
+      "steps": ["level","slightlyAbove","headInFrame","closeGap","staggerHeads","steady"]
     },
     {
       "id": "people.trio",
@@ -157,7 +209,8 @@
       "lighting": ["Everyone's face in the same light"],
       "pose": ["Make a triangle", "One person sits or kneels", "Two stand at different heights", "Close the gaps, lean in"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Duo / group"
+      "source": "SPEC: Duo / group",
+      "steps": ["level","slightlyAbove","headInFrame","staggerHeads","closeGap","steady"]
     },
     {
       "id": "people.group",
@@ -169,7 +222,8 @@
       "lighting": ["Everyone's face in the same light"],
       "pose": ["Tallest person in the middle as anchor", "Build out from the anchor", "Stagger head heights", "Faces between front shoulders", "Close the gaps, lean in"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Duo / group"
+      "source": "SPEC: Duo / group",
+      "steps": ["level","slightlyAbove","headInFrame","staggerHeads","closeGap","steady"]
     },
     {
       "id": "people.casual.duo",
@@ -181,7 +235,8 @@
       "lighting": ["Both faces in the same light"],
       "pose": ["Stand close, angled toward each other", "Heads at different heights", "Laugh at something together", "Look at each other, then the lens"],
       "autoSettings": { "exposure": "face", "hdr": "auto", "whiteBalance": "skin" },
-      "source": "SPEC: Duo / group; Poses (Casual)"
+      "source": "SPEC: Duo / group; Poses (Casual)",
+      "steps": ["level","headInFrame","closeGap","staggerHeads","steady"]
     },
 
     {
@@ -192,7 +247,8 @@
       "framing": { "placement": "Symmetrical: dead centre. Otherwise: thirds.", "notes": ["If you tilt up: keep phone level, step back", "Offer vertical-line correction after capture"] },
       "lighting": ["Golden hour: warm, textured facades", "Blue hour (20–30 min after sunset): lit buildings"],
       "autoSettings": { "exposure": "balanced", "hdr": "on", "lowLight": "merge", "whiteBalance": "auto" },
-      "source": "SPEC: Building / architecture; Lens choice"
+      "source": "SPEC: Building / architecture; Lens choice",
+      "steps": ["pitchLevel","level","thirds","steady"]
     },
     {
       "id": "building.details",
@@ -202,7 +258,8 @@
       "framing": { "placement": "Fill the frame with the pattern", "notes": ["Repeat patterns edge to edge"] },
       "lighting": ["Side light brings out texture"],
       "autoSettings": { "exposure": "balanced", "hdr": "auto", "shutter": "fast" },
-      "source": "SPEC: Building / architecture"
+      "source": "SPEC: Building / architecture",
+      "steps": ["level","objectSize","steady"]
     },
     {
       "id": "building.lowAngle",
@@ -212,7 +269,8 @@
       "framing": { "placement": "Centre symmetrical buildings; lines leading to the top", "notes": ["Get close to the base"] },
       "lighting": ["Sky behind the building: expose for the sky"],
       "autoSettings": { "exposure": "sky", "hdr": "on", "whiteBalance": "auto" },
-      "source": "SPEC: Building / architecture (deliberate exception to the 0.5x rule)"
+      "source": "SPEC: Building / architecture (deliberate exception to the 0.5x rule)",
+      "steps": ["lowAngle","center","steady"]
     },
 
     {
@@ -223,7 +281,8 @@
       "framing": { "placement": "Dish centred or on a third", "notes": ["Best for flat dishes: pizza, salads, bowls, boards", "Wipe the plate rim"] },
       "lighting": ["Light from the side or behind", "Never from the front", "Watch for your own shadow"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto" },
-      "source": "SPEC: Food"
+      "source": "SPEC: Food",
+      "steps": ["overhead","level","center","sideLight","wipeRim","steady"]
     },
     {
       "id": "food.fortyFive",
@@ -233,7 +292,8 @@
       "framing": { "placement": "Dish on a third", "notes": ["Works for most dishes", "Wipe the plate rim"] },
       "lighting": ["Light from the side or behind", "Never from the front"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto" },
-      "source": "SPEC: Food"
+      "source": "SPEC: Food",
+      "steps": ["fortyFive","thirds","sideLight","wipeRim","steady"]
     },
     {
       "id": "food.closeUp",
@@ -243,7 +303,8 @@
       "framing": { "placement": "Fill the frame with the best part", "notes": ["Best for tall/layered dishes: burgers, cakes, drinks, stacks"] },
       "lighting": ["Back or side light makes food glow", "Never from the front"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto", "depth": true },
-      "source": "SPEC: Food"
+      "source": "SPEC: Food",
+      "steps": ["straightOn","objectSize","sideLight","steady"]
     },
 
     {
@@ -254,7 +315,8 @@
       "framing": { "placement": "Horizon on lower third if sky is the star, upper third if the ground is; never centre", "notes": ["Add a foreground element (tree, rock, person)"] },
       "lighting": ["Best 20–30 min either side of sunset"],
       "autoSettings": { "exposure": "balanced", "hdr": "on", "whiteBalance": "auto" },
-      "source": "SPEC: Sunset / sky / landscape"
+      "source": "SPEC: Sunset / sky / landscape",
+      "steps": ["level","pitchLevel","horizonThird","foreground","steady"]
     },
     {
       "id": "sky.sunsetSilhouette",
@@ -264,7 +326,8 @@
       "framing": { "placement": "Horizon on the lower third", "notes": ["Leave a gap between people so silhouettes don't merge"] },
       "lighting": ["Expose for the sky; let the foreground go dark", "Keep shooting after the sun sets"],
       "autoSettings": { "exposure": "sky", "hdr": "off", "whiteBalance": "warm" },
-      "source": "SPEC: Sunset / sky / landscape; Auto camera settings"
+      "source": "SPEC: Sunset / sky / landscape; Auto camera settings",
+      "steps": ["level","horizonThird","steady"]
     },
     {
       "id": "sky.zoomedSun",
@@ -274,7 +337,8 @@
       "framing": { "placement": "Sun or subject on a third; horizon on a third" },
       "lighting": ["Expose for the sun and sky"],
       "autoSettings": { "exposure": "sky", "hdr": "off", "shutter": "fast", "whiteBalance": "warm" },
-      "source": "SPEC: Lens choice; Sunset"
+      "source": "SPEC: Lens choice; Sunset",
+      "steps": ["level","horizonThird","steady"]
     },
 
     {
@@ -285,7 +349,8 @@
       "framing": { "placement": "Centred, or on a third", "notes": ["Clean, plain background"] },
       "lighting": ["Soft side light", "Avoid harsh reflections"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "whiteBalance": "auto", "depth": true },
-      "source": "SPEC: Lens choice; General"
+      "source": "SPEC: Lens choice; General",
+      "steps": ["level","objectSize","center","steady"]
     },
     {
       "id": "object.closeUp",
@@ -295,7 +360,8 @@
       "framing": { "placement": "Fill the frame with the detail" },
       "lighting": ["Side light shows texture"],
       "autoSettings": { "exposure": "subject", "hdr": "auto", "lowLight": "quality" },
-      "source": "SPEC: Lens choice (close-up object → macro)"
+      "source": "SPEC: Lens choice (close-up object → macro)",
+      "steps": ["objectSize","steady"]
     },
     {
       "id": "object.flatLay",
@@ -305,7 +371,8 @@
       "framing": { "placement": "Arrange items on a grid; space between them" },
       "lighting": ["Even, soft light", "Watch for your own shadow"],
       "autoSettings": { "exposure": "balanced", "hdr": "auto" },
-      "source": "SPEC: Food (overhead technique)"
+      "source": "SPEC: Food (overhead technique)",
+      "steps": ["overhead","level","center","steady"]
     },
 
     {
@@ -316,7 +383,8 @@
       "framing": { "placement": "Subject on the nearest third" },
       "lighting": ["Find the soft light"],
       "autoSettings": { "exposure": "balanced", "hdr": "auto" },
-      "source": "SPEC: General"
+      "source": "SPEC: General",
+      "steps": ["level","thirds","steady"]
     }
   ],
 

@@ -58,12 +58,29 @@ struct Playbook: Decodable {
         var lighting: [String]
         var pose: [String]?
         var autoSettings: AutoSettings
+        /// The step-by-step walkthrough (names from stepLibrary, or inline steps).
+        var steps: [StepRef]?
         var source: String?
     }
 
     var version: Int
     var rules: [Rule]
     var lighting: [LightingRule]
+    /// Reusable steps, referenced by name from rules ("level", "eyeLevel", …).
+    var stepLibrary: [String: GuideStep]
+
+    /// A rule's steps with library names filled in (unknown names are logged and skipped).
+    func steps(for rule: Rule) -> [GuideStep] {
+        (rule.steps ?? []).compactMap { ref in
+            switch ref {
+            case .inline(let step): return step
+            case .named(let name):
+                if let step = stepLibrary[name] { return step }
+                Log.warn("Playbook: rule \(rule.id) uses unknown step \"\(name)\"")
+                return nil
+            }
+        }
+    }
 
     /// Lighting coaching (M5), keyed by the lighting descriptors.
     struct LightingRule: Decodable, Identifiable {
