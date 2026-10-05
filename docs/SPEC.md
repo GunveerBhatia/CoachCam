@@ -20,22 +20,18 @@ Everything is automatic by default and can be overridden with a tap.
 - Sanity checks, e.g. nothing closer than about 2 m can be a building; buildings need distance,
   strong vertical lines, and are usually outdoors
 
-**Photo type** is always your manual choice, from a picker on the camera screen. Only types
-that fit the detected subject are shown. The last choice per subject category is remembered.
+**Shot suggestions** (replaced photo types, 2026-10-04): when a subject locks, a row of 3–6
+text cards (icon, title, one line; no example images) shows the suggestions that fit what's
+detected (subject, people count/types, props, light, time of day), ranked by fit and by your
+favourites. Tapping a card starts its step-by-step walkthrough; the lens follows the tapped card.
+48 suggestions live in `playbook.json` (food, one person, selfies, duos, groups, buildings,
+sky, objects), each with conditions, lens, camera height/angle, placement, lighting, auto
+settings, burst use and steps.
 
-| Category | Photo types |
-|---|---|
-| People | Headshot, Portrait, Casual, Street, Full body, Mirror fit, Pro |
-| Buildings | Full facade, Details, Dramatic low angle |
-| Food | Overhead, 45°, Close-up |
-| Sky / landscape | Wide scene, Sunset silhouette, Zoomed-in sun |
-| Objects | Product, Close-up, Flat lay |
-
-**Coaching = detection + photo type.** The playbook has entries keyed by (subject category,
-people count/types, props, photo type). Each has: lens/zoom, camera height and angle,
-framing/placement, lighting instructions, pose steps (people), and auto camera settings.
-If there's no exact entry, the closest one is used, and the debug overlay shows which.
-
+**Guided steps:** one step at a time (text under ~8 words + a matching arrow), auto-advance
+after ~0.4 s with a check mark and haptic, quiet step-back if a done step comes undone, Skip and
+swipe-back, progress dots, and "Take it" + green shutter when all steps pass. Step text, arrow
+types and checks come from the playbook's step library.
 ## Photography rules (research)
 
 ### General (all photos)
